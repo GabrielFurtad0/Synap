@@ -176,10 +176,44 @@
 @layer base {
   * {
     border-color: var(--color-border);
+    scrollbar-width: thin;
+    scrollbar-color: oklch(1 0 0 / 14%) transparent;
+  }
+
+  .light * {
+    scrollbar-color: oklch(0 0 0 / 14%) transparent;
   }
 
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
   }
+}
+
+/* Custom sleek scrollbars (Linear / TickTick dark mode style) */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: oklch(1 0 0 / 12%);
+  border-radius: 9999px;
+  transition: background 0.15s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: oklch(1 0 0 / 26%);
+}
+
+.light ::-webkit-scrollbar-thumb {
+  background: oklch(0 0 0 / 12%);
+}
+
+.light ::-webkit-scrollbar-thumb:hover {
+  background: oklch(0 0 0 / 26%);
 }
