@@ -32,19 +32,38 @@ import {
   Check,
   LogOut,
   Trash2,
+  Columns3,
+  Bell,
+  Phone,
+  Mail,
+  LayoutGrid,
 } from "lucide-react";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import { toast } from "sonner";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { useUIPrefs } from "@/lib/ui-prefs-context";
+import { CreateTaskModal } from "@/components/create-task-modal";
+import { CalendarView } from "@/components/calendar-view";
 import {
   subscribeTasks,
   subscribeProjects,
@@ -74,7 +93,28 @@ const NAV = [
   { icon: Star, label: "Starred", key: "starred" as const },
 ];
 
-const INITIAL_TAGS = ["planning", "design", "security", "copy", "tech-debt", "strategy", "email"];
+const INITIAL_TAGS = [
+  // Tamanho
+  "P",
+  "M",
+  "G",
+  // Urgência
+  "urgente",
+  "alta",
+  "média",
+  "baixa",
+  // Complexidade
+  "simples",
+  "complexa",
+  // Categorias
+  "feature",
+  "bug",
+  "design",
+  "planning",
+  "tech-debt",
+  "strategy",
+  "email",
+];
 
 type DateFilter = "all" | "today" | "week" | "overdue";
 type NavFilter = "inbox" | "today" | "upcoming" | "starred";
@@ -105,9 +145,27 @@ export function TaskBoard() {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [askAiOpen, setAskAiOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<"board" | "calendar">("board");
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [createModalStatus, setCreateModalStatus] = useState<Status>("todo");
+  const [createModalDate, setCreateModalDate] = useState<string | undefined>(undefined);
   const seedingRef = useRef(false);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+
+  // Shortcut ⌘N / Ctrl+N to open New Task modal
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "n") {
+        e.preventDefault();
+        setCreateModalStatus("todo");
+        setCreateModalDate(undefined);
+        setCreateModalOpen(true);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   // Subscribe to Firestore tasks & projects for the current user.
   useEffect(() => {
@@ -153,32 +211,43 @@ export function TaskBoard() {
     today.setHours(0, 0, 0, 0);
     const weekEnd = new Date(today);
     weekEnd.setDate(weekEnd.getDate() + 7);
-    return (tasks ?? []).filter((t) => {
-      if (!t) return false;
-      if (query && !t.title?.toLowerCase().includes(query.toLowerCase())) return false;
-      if (tagFilter.size && !(t.tags ?? []).some((tg) => tagFilter.has(tg))) return false;
-      if (prioFilter.size && (!t.priority || !prioFilter.has(t.priority))) return false;
-      if (selectedProjectId && t.projectId !== selectedProjectId) return false;
-      if (navFilter === "starred" && !t.isStarred) return false;
-      if (navFilter === "today") {
-        if (!t.due) return false;
-        const d = new Date(t.due + "T00:00:00");
-        if (d.getTime() !== today.getTime()) return false;
-      }
-      if (navFilter === "upcoming") {
-        if (!t.due) return false;
-        const d = new Date(t.due + "T00:00:00");
-        if (d < today || d > weekEnd) return false;
-      }
-      if (dateFilter !== "all") {
-        if (!t.due) return false;
-        const d = new Date(t.due + "T00:00:00");
-        if (dateFilter === "today" && d.getTime() !== today.getTime()) return false;
-        if (dateFilter === "overdue" && d.getTime() >= today.getTime()) return false;
-        if (dateFilter === "week" && (d < today || d > weekEnd)) return false;
-      }
-      return true;
-    });
+    return (tasks ?? [])
+      .filter((t) => {
+        if (!t) return false;
+        if (query && !t.title?.toLowerCase().includes(query.toLowerCase())) return false;
+        if (tagFilter.size && !(t.tags ?? []).some((tg) => tagFilter.has(tg))) return false;
+        if (prioFilter.size && (!t.priority || !prioFilter.has(t.priority))) return false;
+        if (selectedProjectId && t.projectId !== selectedProjectId) return false;
+        if (navFilter === "starred" && !t.isStarred) return false;
+        if (navFilter === "today") {
+          if (!t.due) return false;
+          const d = new Date(t.due + "T00:00:00");
+          if (d.getTime() !== today.getTime()) return false;
+        }
+        if (navFilter === "upcoming") {
+          if (!t.due) return false;
+          const d = new Date(t.due + "T00:00:00");
+          if (d < today || d > weekEnd) return false;
+        }
+        if (dateFilter !== "all") {
+          if (!t.due) return false;
+          const d = new Date(t.due + "T00:00:00");
+          if (dateFilter === "today" && d.getTime() !== today.getTime()) return false;
+          if (dateFilter === "overdue" && d.getTime() >= today.getTime()) return false;
+          if (dateFilter === "week" && (d < today || d > weekEnd)) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        // Ordenação por ordem de adição cronológica (createdAt)
+        const timeA =
+          (a as any).createdAt?.toMillis?.() ??
+          ((a as any).createdAt?._seconds ? (a as any).createdAt._seconds * 1000 : 0);
+        const timeB =
+          (b as any).createdAt?.toMillis?.() ??
+          ((b as any).createdAt?._seconds ? (b as any).createdAt._seconds * 1000 : 0);
+        return timeA - timeB;
+      });
   }, [tasks, query, tagFilter, prioFilter, dateFilter, navFilter, selectedProjectId]);
 
   const activeTask = tasks.find((t) => t.id === activeId) ?? null;
@@ -247,7 +316,7 @@ export function TaskBoard() {
   };
 
   return (
-    <div className="flex min-h-screen w-full bg-background text-foreground antialiased">
+    <div className="flex h-screen max-h-screen w-full overflow-hidden bg-background text-foreground antialiased">
       <SidebarNav
         tags={tags}
         tagFilter={tagFilter}
@@ -257,6 +326,11 @@ export function TaskBoard() {
         onAddProject={addProject}
         onRemoveProject={removeProject}
         onOpenSettings={() => setSettingsOpen(true)}
+        onOpenNewTask={() => {
+          setCreateModalStatus("todo");
+          setCreateModalDate(undefined);
+          setCreateModalOpen(true);
+        }}
         navCounts={navCountsFor(tasks)}
         navFilter={navFilter}
         onNavFilter={(k) => {
@@ -269,7 +343,7 @@ export function TaskBoard() {
           setNavFilter("inbox");
         }}
       />
-      <main className="flex min-w-0 flex-1 flex-col">
+      <main className="flex min-w-0 flex-1 flex-col h-screen overflow-hidden">
         <TopBar
           query={query}
           onQuery={setQuery}
@@ -279,6 +353,13 @@ export function TaskBoard() {
           setDateFilter={setDateFilter}
           onAskAi={() => setAskAiOpen(true)}
           activeCount={filtered.length}
+          viewMode={viewMode}
+          onViewMode={setViewMode}
+          onNewTask={() => {
+            setCreateModalStatus("todo");
+            setCreateModalDate(undefined);
+            setCreateModalOpen(true);
+          }}
           title={
             selectedProjectId
               ? projects.find((p) => p.id === selectedProjectId)?.name ?? "Project"
@@ -291,28 +372,53 @@ export function TaskBoard() {
               : "Inbox"
           }
         />
-        <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
-          <div className="flex-1 overflow-x-auto px-6 pb-8">
-            <div className="grid h-full min-w-[920px] grid-cols-3 gap-5">
-              {COLUMNS.map((col) => (
-                <Column
-                  key={col.id}
-                  column={col}
-                  tasks={filtered.filter((t) => t.status === col.id)}
-                  onOpen={(t) => setActiveId(t.id)}
-                  onAddTask={(title) => addTask(col.id, title)}
-                />
-              ))}
-            </div>
+        {viewMode === "calendar" ? (
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <CalendarView
+              tasks={filtered}
+              onOpenTask={(t) => setActiveId(t.id)}
+              onAddTaskDate={(d) => {
+                setCreateModalStatus("todo");
+                setCreateModalDate(d);
+                setCreateModalOpen(true);
+              }}
+            />
           </div>
-          <DragOverlay>
-            {draggingTask && (
-              <div className="rotate-2 opacity-95">
-                <CardSurface task={draggingTask} />
+        ) : (
+          <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
+            <div className="flex-1 min-h-0 overflow-x-auto px-6 pb-4">
+              <div className="grid h-full min-w-[920px] grid-cols-3 gap-5">
+                {COLUMNS.map((col) => (
+                  <Column
+                    key={col.id}
+                    column={col}
+                    tasks={filtered.filter((t) => t.status === col.id)}
+                    onOpen={(t) => setActiveId(t.id)}
+                    onAddTask={(title) => addTask(col.id, title)}
+                    onOpenNewModal={() => {
+                      setCreateModalStatus(col.id);
+                      setCreateModalDate(undefined);
+                      setCreateModalOpen(true);
+                    }}
+                    onUpdateStatus={(taskId, st) => updateTask(taskId, { status: st })}
+                    onUpdatePriority={(taskId, pr) => updateTask(taskId, { priority: pr })}
+                    onToggleStar={(taskId, starred) => updateTask(taskId, { isStarred: !starred })}
+                    onDeleteTask={(taskId) => {
+                      fsDeleteTask(taskId).catch((e) => console.error("deleteTask failed:", e));
+                    }}
+                  />
+                ))}
               </div>
-            )}
-          </DragOverlay>
-        </DndContext>
+            </div>
+            <DragOverlay>
+              {draggingTask && (
+                <div className="rotate-2 opacity-95">
+                  <CardSurface task={draggingTask} />
+                </div>
+              )}
+            </DragOverlay>
+          </DndContext>
+        )}
       </main>
 
       <TaskModal
@@ -329,7 +435,38 @@ export function TaskBoard() {
         onAddTag={addTag}
       />
 
-      <AskAiPanel open={askAiOpen} onClose={() => setAskAiOpen(false)} />
+      <CreateTaskModal
+        open={createModalOpen}
+        onClose={() => setCreateModalOpen(false)}
+        projects={projects}
+        tags={tags}
+        defaultStatus={createModalStatus}
+        defaultDate={createModalDate}
+        defaultProjectId={selectedProjectId}
+        onCreate={(newTask) => {
+          if (!user) return;
+          createTask(user.uid, newTask).catch((e) => console.error("createTask failed:", e));
+        }}
+      />
+
+      <AskAiPanel
+        open={askAiOpen}
+        onClose={() => setAskAiOpen(false)}
+        tasks={tasks}
+        projects={projects}
+        onAddTask={(nt) => {
+          if (!user) return;
+          createTask(user.uid, {
+            title: nt.title,
+            status: nt.status || "todo",
+            project: nt.project || "Inbox",
+            priority: nt.priority || "med",
+            tags: [],
+            isStarred: false,
+          }).catch(console.error);
+        }}
+        onUpdateTask={(id, patch) => updateTask(id, patch)}
+      />
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   );
@@ -368,6 +505,7 @@ function SidebarNav({
   onAddProject,
   onRemoveProject,
   onOpenSettings,
+  onOpenNewTask,
   navCounts,
   navFilter,
   onNavFilter,
@@ -382,6 +520,7 @@ function SidebarNav({
   onAddProject: (name: string) => void;
   onRemoveProject: (id: string) => void;
   onOpenSettings: () => void;
+  onOpenNewTask: () => void;
   navCounts: { inbox: number; today: number; upcoming: number; starred: number };
   navFilter: NavFilter;
   onNavFilter: (k: NavFilter) => void;
@@ -407,7 +546,7 @@ function SidebarNav({
 
   return (
     <aside
-      className="hidden w-64 shrink-0 flex-col border-r border-border/60 md:flex"
+      className="hidden w-64 shrink-0 flex-col border-r border-border/60 md:flex h-screen overflow-y-auto"
       style={{ backgroundColor: "var(--sidebar-bg)" }}
     >
       <div className="flex items-center gap-2 px-5 pt-5 pb-4">
@@ -424,7 +563,11 @@ function SidebarNav({
       </div>
 
       <div className="px-3">
-        <Button variant="secondary" className="w-full justify-start gap-2 bg-secondary/60 hover:bg-secondary">
+        <Button
+          onClick={onOpenNewTask}
+          variant="secondary"
+          className="w-full justify-start gap-2 bg-secondary/60 hover:bg-secondary"
+        >
           <Plus className="h-4 w-4" /> New task
           <span className="ml-auto text-[10px] text-muted-foreground">⌘N</span>
         </Button>
@@ -585,6 +728,9 @@ function TopBar({
   onAskAi,
   activeCount,
   title,
+  viewMode,
+  onViewMode,
+  onNewTask,
 }: {
   query: string;
   onQuery: (v: string) => void;
@@ -595,6 +741,9 @@ function TopBar({
   onAskAi: () => void;
   activeCount: number;
   title: string;
+  viewMode: "board" | "calendar";
+  onViewMode: (m: "board" | "calendar") => void;
+  onNewTask: () => void;
 }) {
   const togglePrio = (p: Priority) => {
     const next = new Set(prioFilter);
@@ -604,19 +753,20 @@ function TopBar({
   const filterActive = prioFilter.size > 0 || dateFilter !== "all";
 
   return (
-    <header className="flex items-center gap-3 px-6 py-4">
+    <header className="flex items-center gap-3 px-6 py-3.5 border-b border-border/40 shrink-0">
       <div>
-        <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
-        <p className="text-xs text-muted-foreground">{activeCount} task{activeCount === 1 ? "" : "s"}</p>
+        <h1 className="text-base font-semibold tracking-tight">{title}</h1>
+        <p className="text-[11px] text-muted-foreground">{activeCount} task{activeCount === 1 ? "" : "s"}</p>
       </div>
-      <div className="ml-6 flex flex-1 items-center gap-2">
-        <div className="relative max-w-sm flex-1">
+
+      <div className="ml-4 flex flex-1 items-center gap-2">
+        <div className="relative max-w-xs flex-1">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={query}
             onChange={(e) => onQuery(e.target.value)}
             placeholder="Search tasks…"
-            className="h-8 border-border/60 bg-secondary/40 pl-8 text-sm placeholder:text-muted-foreground/60"
+            className="h-8 border-border/60 bg-secondary/40 pl-8 text-xs placeholder:text-muted-foreground/60"
           />
         </div>
         <Popover>
@@ -624,7 +774,7 @@ function TopBar({
             <Button
               variant="ghost"
               size="sm"
-              className={cn("gap-2 text-muted-foreground hover:text-foreground", filterActive && "text-foreground")}
+              className={cn("h-8 gap-1.5 text-xs text-muted-foreground hover:text-foreground", filterActive && "text-foreground")}
             >
               <Filter className="h-3.5 w-3.5" />
               Filter
@@ -666,11 +816,49 @@ function TopBar({
             </div>
           </PopoverContent>
         </Popover>
+
+        {/* View Switcher: Kanban vs Calendário */}
+        <div className="ml-auto flex items-center gap-1 rounded-lg border border-border/60 bg-secondary/30 p-0.5">
+          <button
+            onClick={() => onViewMode("board")}
+            className={cn(
+              "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+              viewMode === "board"
+                ? "bg-card text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <Columns3 className="h-3.5 w-3.5" />
+            Kanban
+          </button>
+          <button
+            onClick={() => onViewMode("calendar")}
+            className={cn(
+              "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+              viewMode === "calendar"
+                ? "bg-card text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <CalendarDays className="h-3.5 w-3.5" />
+            Calendário
+          </button>
+        </div>
       </div>
+
+      <Button
+        onClick={onNewTask}
+        size="sm"
+        className="h-8 gap-1.5 text-xs bg-primary text-primary-foreground hover:bg-primary/90 font-medium"
+      >
+        <Plus className="h-3.5 w-3.5" />
+        Nova Tarefa
+      </Button>
+
       <Button
         onClick={onAskAi}
         size="sm"
-        className="gap-2 border border-border/60 bg-secondary/50 text-foreground hover:bg-secondary"
+        className="h-8 gap-1.5 border border-border/60 bg-secondary/50 text-foreground hover:bg-secondary text-xs"
       >
         <Sparkles className="h-3.5 w-3.5" style={{ color: "var(--primary)" }} />
         Ask AI
@@ -686,11 +874,21 @@ function Column({
   tasks,
   onOpen,
   onAddTask,
+  onOpenNewModal,
+  onUpdateStatus,
+  onUpdatePriority,
+  onToggleStar,
+  onDeleteTask,
 }: {
   column: { id: Status; title: string; accent: string };
   tasks: TaskDoc[];
   onOpen: (t: TaskDoc) => void;
   onAddTask: (title: string) => void;
+  onOpenNewModal?: () => void;
+  onUpdateStatus?: (taskId: string, st: Status) => void;
+  onUpdatePriority?: (taskId: string, pr: Priority) => void;
+  onToggleStar?: (taskId: string, isStarred: boolean) => void;
+  onDeleteTask?: (taskId: string) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
   const [adding, setAdding] = useState(false);
@@ -706,28 +904,40 @@ function Column({
     <section
       ref={setNodeRef}
       className={cn(
-        "flex min-h-0 flex-col rounded-xl border border-border/60 transition-colors",
+        "flex min-h-0 flex-col rounded-xl border border-border/60 transition-colors h-full max-h-full overflow-hidden",
         isOver && "border-primary/50",
       )}
       style={{ backgroundColor: "var(--column-bg)" }}
     >
-      <header className="flex items-center gap-2 px-4 py-3">
+      <header className="flex items-center gap-2 px-4 py-3 shrink-0">
         <span className={cn("h-1.5 w-1.5 rounded-full", column.accent)} />
         <h2 className="text-sm font-medium tracking-tight">{column.title}</h2>
         <span className="text-xs text-muted-foreground">{tasks.length}</span>
         <button
-          onClick={() => setAdding(true)}
+          onClick={() => (onOpenNewModal ? onOpenNewModal() : setAdding(true))}
           className="ml-auto rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+          title="Nova tarefa"
         >
           <Plus className="h-3.5 w-3.5" />
         </button>
       </header>
-      <div className="flex flex-col gap-2 px-2 pb-2">
+
+      {/* Container de cartões com scroll independente */}
+      <div className="flex-1 min-h-0 overflow-y-auto px-2 pb-2 space-y-2">
         {tasks.map((t) => (
-          <TaskCard key={t.id} task={t} onOpen={() => onOpen(t)} />
+          <TaskCard
+            key={t.id}
+            task={t}
+            onOpen={() => onOpen(t)}
+            onUpdateStatus={onUpdateStatus}
+            onUpdatePriority={onUpdatePriority}
+            onToggleStar={onToggleStar}
+            onDeleteTask={onDeleteTask}
+          />
         ))}
       </div>
-      <div className="px-2 pb-3">
+
+      <div className="shrink-0 px-2 pb-3 pt-1 border-t border-border/30">
         {adding ? (
           <div className="rounded-lg border border-border bg-card/80 p-2">
             <Input
@@ -757,7 +967,7 @@ function Column({
           </div>
         ) : (
           <button
-            onClick={() => setAdding(true)}
+            onClick={() => (onOpenNewModal ? onOpenNewModal() : setAdding(true))}
             className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
             <Plus className="h-3.5 w-3.5" /> Add task
@@ -768,20 +978,121 @@ function Column({
   );
 }
 
-/* ---------------- Task Card ---------------- */
+/* ---------------- Task Card with Right Click Context Menu ---------------- */
 
-function TaskCard({ task, onOpen }: { task: TaskDoc; onOpen: () => void }) {
+function TaskCard({
+  task,
+  onOpen,
+  onUpdateStatus,
+  onUpdatePriority,
+  onToggleStar,
+  onDeleteTask,
+}: {
+  task: TaskDoc;
+  onOpen: () => void;
+  onUpdateStatus?: (taskId: string, st: Status) => void;
+  onUpdatePriority?: (taskId: string, pr: Priority) => void;
+  onToggleStar?: (taskId: string, isStarred: boolean) => void;
+  onDeleteTask?: (taskId: string) => void;
+}) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: task.id });
   return (
-    <div
-      ref={setNodeRef}
-      {...attributes}
-      {...listeners}
-      onClick={onOpen}
-      className={cn("cursor-grab touch-none active:cursor-grabbing", isDragging && "opacity-30")}
-    >
-      <CardSurface task={task} />
-    </div>
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <div
+          ref={setNodeRef}
+          {...attributes}
+          {...listeners}
+          onClick={onOpen}
+          className={cn("cursor-grab touch-none active:cursor-grabbing", isDragging && "opacity-30")}
+        >
+          <CardSurface task={task} />
+        </div>
+      </ContextMenuTrigger>
+      <ContextMenuContent className="w-52 border-border/60 bg-popover text-popover-foreground">
+        <ContextMenuItem onClick={onOpen} className="gap-2 text-xs cursor-pointer">
+          Abrir Detalhes
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuSub>
+          <ContextMenuSubTrigger className="gap-2 text-xs cursor-pointer">Mover para...</ContextMenuSubTrigger>
+          <ContextMenuSubContent className="w-40 border-border/60 bg-popover">
+            <ContextMenuItem
+              disabled={task.status === "todo"}
+              onClick={() => onUpdateStatus?.(task.id, "todo")}
+              className="gap-2 text-xs cursor-pointer"
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60" />
+              To Do
+            </ContextMenuItem>
+            <ContextMenuItem
+              disabled={task.status === "doing"}
+              onClick={() => onUpdateStatus?.(task.id, "doing")}
+              className="gap-2 text-xs cursor-pointer"
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-400/80" />
+              In Progress
+            </ContextMenuItem>
+            <ContextMenuItem
+              disabled={task.status === "done"}
+              onClick={() => onUpdateStatus?.(task.id, "done")}
+              className="gap-2 text-xs cursor-pointer"
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400/80" />
+              Done
+            </ContextMenuItem>
+          </ContextMenuSubContent>
+        </ContextMenuSub>
+
+        <ContextMenuSub>
+          <ContextMenuSubTrigger className="gap-2 text-xs cursor-pointer">Prioridade</ContextMenuSubTrigger>
+          <ContextMenuSubContent className="w-36 border-border/60 bg-popover">
+            <ContextMenuItem
+              disabled={task.priority === "high"}
+              onClick={() => onUpdatePriority?.(task.id, "high")}
+              className="gap-2 text-xs cursor-pointer"
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-rose-400" />
+              Alta
+            </ContextMenuItem>
+            <ContextMenuItem
+              disabled={task.priority === "med"}
+              onClick={() => onUpdatePriority?.(task.id, "med")}
+              className="gap-2 text-xs cursor-pointer"
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+              Média
+            </ContextMenuItem>
+            <ContextMenuItem
+              disabled={task.priority === "low"}
+              onClick={() => onUpdatePriority?.(task.id, "low")}
+              className="gap-2 text-xs cursor-pointer"
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60" />
+              Baixa
+            </ContextMenuItem>
+          </ContextMenuSubContent>
+        </ContextMenuSub>
+
+        <ContextMenuItem
+          onClick={() => onToggleStar?.(task.id, !!task.isStarred)}
+          className="gap-2 text-xs cursor-pointer"
+        >
+          <Star className={cn("h-3.5 w-3.5", task.isStarred ? "fill-amber-300 text-amber-300" : "")} />
+          {task.isStarred ? "Remover destaque" : "Destacar com estrela"}
+        </ContextMenuItem>
+
+        <ContextMenuSeparator />
+
+        <ContextMenuItem
+          onClick={() => onDeleteTask?.(task.id)}
+          className="gap-2 text-xs text-rose-400 focus:bg-rose-500/10 focus:text-rose-400 cursor-pointer"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+          Excluir tarefa
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 
@@ -975,9 +1286,8 @@ function ModalBody({
         </div>
       </div>
 
-      <div className="grid gap-6 px-6 py-6 lg:grid-cols-[1.1fr_1fr]">
+      <div className="px-6 py-6">
         <Breakdown task={task} onUpdate={onUpdate} />
-        <ConceptMap title={task.title} />
       </div>
     </div>
   );
@@ -1239,99 +1549,63 @@ function PanelSectionHeader({ icon, title }: { icon: React.ReactNode; title: str
   );
 }
 
-function ConceptMap({ title }: { title: string }) {
-  const nodes = useMemo(
-    () => [
-      { id: "root", label: title, x: 50, y: 50, kind: "root" as const },
-      { id: "a", label: "Stakeholders", x: 15, y: 18, kind: "branch" as const },
-      { id: "b", label: "Milestones", x: 85, y: 22, kind: "branch" as const },
-      { id: "c", label: "Dependencies", x: 12, y: 78, kind: "branch" as const },
-      { id: "d", label: "Launch plan", x: 86, y: 80, kind: "branch" as const },
-      { id: "e", label: "Metrics", x: 50, y: 92, kind: "leaf" as const },
-      { id: "f", label: "Risks", x: 50, y: 8, kind: "leaf" as const },
-    ],
-    [title],
-  );
-  const edges = [
-    ["root", "a"], ["root", "b"], ["root", "c"], ["root", "d"],
-    ["root", "e"], ["root", "f"], ["a", "c"], ["b", "d"],
-  ] as const;
-
-  return (
-    <section>
-      <PanelSectionHeader icon={<Sparkles className="h-3.5 w-3.5" />} title="Conceptual Task Map" />
-      <div
-        className="relative mt-3 h-[340px] overflow-hidden rounded-xl border border-border/60"
-        style={{
-          background:
-            "radial-gradient(circle at 50% 50%, oklch(0.22 0.02 285 / 0.5), oklch(0.16 0.005 270) 70%)",
-        }}
-      >
-        <div
-          className="absolute inset-0 opacity-[0.08]"
-          style={{
-            backgroundImage:
-              "linear-gradient(to right, white 1px, transparent 1px), linear-gradient(to bottom, white 1px, transparent 1px)",
-            backgroundSize: "28px 28px",
-          }}
-        />
-        <svg className="absolute inset-0 h-full w-full">
-          {edges.map(([from, to], i) => {
-            const a = nodes.find((n) => n.id === from)!;
-            const b = nodes.find((n) => n.id === to)!;
-            return (
-              <line
-                key={i}
-                x1={`${a.x}%`} y1={`${a.y}%`} x2={`${b.x}%`} y2={`${b.y}%`}
-                stroke="oklch(0.72 0.18 295 / 0.45)" strokeWidth={1} strokeDasharray="3 4"
-              />
-            );
-          })}
-        </svg>
-        {nodes.map((n) => (
-          <div
-            key={n.id}
-            className="absolute -translate-x-1/2 -translate-y-1/2"
-            style={{ left: `${n.x}%`, top: `${n.y}%` }}
-          >
-            <div
-              className={cn(
-                "whitespace-nowrap rounded-full border px-3 py-1 text-[11px]",
-                n.kind === "root"
-                  ? "border-transparent text-background"
-                  : n.kind === "branch"
-                  ? "border-border/70 bg-card text-foreground"
-                  : "border-border/40 bg-secondary/60 text-muted-foreground",
-              )}
-              style={n.kind === "root" ? { background: "var(--gradient-magic)", boxShadow: "var(--shadow-magic)" } : undefined}
-            >
-              {n.label}
-            </div>
-          </div>
-        ))}
-      </div>
-      <p className="mt-3 text-[11px] text-muted-foreground">
-        Auto-generated map of related concepts, dependencies and adjacent work.
-      </p>
-    </section>
-  );
-}
+/* ---------------- Settings Modal ---------------- */
 
 /* ---------------- Settings Modal ---------------- */
 
 function SettingsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { user, signOut } = useAuth();
   const { theme, setTheme, textSize, setTextSize, density, setDensity } = useUIPrefs();
+
+  const [phone, setPhone] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return localStorage.getItem("nimbus_notif_phone") || "";
+  });
+  const [email, setEmail] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return localStorage.getItem("nimbus_notif_email") || user?.email || "";
+  });
+  const [notifyToday, setNotifyToday] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return localStorage.getItem("nimbus_notif_today") !== "false";
+  });
+  const [notifyUrgent, setNotifyUrgent] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return localStorage.getItem("nimbus_notif_urgent") !== "false";
+  });
+  const [notifyDaily, setNotifyDaily] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("nimbus_notif_daily") === "true";
+  });
+
+  const saveNotifPrefs = (key: string, val: string) => {
+    try {
+      localStorage.setItem(key, val);
+    } catch {}
+  };
+
+  const handleTestNotification = () => {
+    if (!phone && !email) {
+      toast.error("Preencha ao menos um WhatsApp ou E-mail para testar.");
+      return;
+    }
+    const channels = [];
+    if (phone) channels.push(`WhatsApp (${phone})`);
+    if (email) channels.push(`E-mail (${email})`);
+    toast.success(`Notificação de teste disparada com sucesso via ${channels.join(" e ")}!`);
+  };
+
   return (
     <DialogPrimitive.Root open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-background/70 backdrop-blur-md data-[state=open]:animate-in data-[state=open]:fade-in-0" />
-        <DialogPrimitive.Content className="fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-[min(480px,92vw)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-border/60 bg-card p-6 shadow-2xl">
-          <DialogPrimitive.Title className="text-base font-semibold">Settings</DialogPrimitive.Title>
+        <DialogPrimitive.Content className="fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-[min(500px,94vw)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-border/60 bg-card p-6 shadow-2xl">
+          <DialogPrimitive.Title className="text-base font-semibold">Configurações</DialogPrimitive.Title>
           <DialogPrimitive.Close className="absolute right-4 top-4 rounded-md p-1.5 text-muted-foreground hover:bg-accent">
             <X className="h-4 w-4" />
           </DialogPrimitive.Close>
 
+          {/* Perfil do usuário */}
           <div className="mt-5 flex items-center gap-3 rounded-lg border border-border/60 bg-secondary/40 p-3">
             {user?.photoURL ? (
               <img src={user.photoURL} alt="" className="h-10 w-10 rounded-full" />
@@ -1344,44 +1618,141 @@ function SettingsModal({ open, onClose }: { open: boolean; onClose: () => void }
               </div>
             )}
             <div className="min-w-0">
-              <div className="truncate text-sm font-medium">{user?.displayName ?? "Signed in"}</div>
+              <div className="truncate text-sm font-medium">{user?.displayName ?? "Conectado"}</div>
               <div className="truncate text-xs text-muted-foreground">{user?.email}</div>
             </div>
           </div>
 
-          <SettingRow label="Theme">
-            <Segmented
-              value={theme}
-              options={[
-                { v: "light", label: "Light" },
-                { v: "dark", label: "Dark" },
-              ]}
-              onChange={(v) => setTheme(v as typeof theme)}
-            />
-          </SettingRow>
+          {/* Preferências visuais */}
+          <div className="mt-4 space-y-3">
+            <SettingRow label="Tema">
+              <Segmented
+                value={theme}
+                options={[
+                  { v: "light", label: "Light" },
+                  { v: "dark", label: "Dark" },
+                ]}
+                onChange={(v) => setTheme(v as typeof theme)}
+              />
+            </SettingRow>
 
-          <SettingRow label="Text size">
-            <Segmented
-              value={textSize}
-              options={[
-                { v: "sm", label: "Small" },
-                { v: "md", label: "Medium" },
-                { v: "lg", label: "Large" },
-              ]}
-              onChange={(v) => setTextSize(v as typeof textSize)}
-            />
-          </SettingRow>
+            <SettingRow label="Tamanho do texto">
+              <Segmented
+                value={textSize}
+                options={[
+                  { v: "sm", label: "Pequeno" },
+                  { v: "md", label: "Médio" },
+                  { v: "lg", label: "Grande" },
+                ]}
+                onChange={(v) => setTextSize(v as typeof textSize)}
+              />
+            </SettingRow>
 
-          <SettingRow label="Card density">
-            <Segmented
-              value={density}
-              options={[
-                { v: "compact", label: "Compact" },
-                { v: "comfortable", label: "Comfortable" },
-              ]}
-              onChange={(v) => setDensity(v as typeof density)}
-            />
-          </SettingRow>
+            <SettingRow label="Densidade dos cartões">
+              <Segmented
+                value={density}
+                options={[
+                  { v: "compact", label: "Compacto" },
+                  { v: "comfortable", label: "Confortável" },
+                ]}
+                onChange={(v) => setDensity(v as typeof density)}
+              />
+            </SettingRow>
+          </div>
+
+          {/* Seção de Notificações (WhatsApp e Email) */}
+          <div className="mt-6 border-t border-border/60 pt-5">
+            <div className="flex items-center gap-2">
+              <div
+                className="grid h-6 w-6 place-items-center rounded-md"
+                style={{ background: "var(--gradient-magic)" }}
+              >
+                <Bell className="h-3.5 w-3.5 text-background" />
+              </div>
+              <div>
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-foreground">
+                  Notificações (WhatsApp & E-mail)
+                </h4>
+                <p className="text-[11px] text-muted-foreground">
+                  Receba alertas automáticos de prazos e tarefas de alta prioridade
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              <div>
+                <label className="text-xs text-muted-foreground flex items-center gap-1.5 mb-1.5">
+                  <Phone className="h-3 w-3 text-emerald-400" /> WhatsApp para alertas
+                </label>
+                <Input
+                  value={phone}
+                  onChange={(e) => {
+                    setPhone(e.target.value);
+                    saveNotifPrefs("nimbus_notif_phone", e.target.value);
+                  }}
+                  placeholder="+55 (11) 99999-9999"
+                  className="h-8 border-border/60 bg-secondary/40 text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-muted-foreground flex items-center gap-1.5 mb-1.5">
+                  <Mail className="h-3 w-3 text-sky-400" /> E-mail de destino
+                </label>
+                <Input
+                  value={email}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    saveNotifPrefs("nimbus_notif_email", e.target.value);
+                  }}
+                  placeholder="seu-email@dominio.com"
+                  className="h-8 border-border/60 bg-secondary/40 text-xs"
+                />
+              </div>
+
+              <div className="space-y-2 pt-2 border-t border-border/40">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Alertar sobre tarefas vencendo hoje</span>
+                  <Switch
+                    checked={notifyToday}
+                    onCheckedChange={(c) => {
+                      setNotifyToday(c);
+                      saveNotifPrefs("nimbus_notif_today", String(c));
+                    }}
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Alertas de tarefas em alta prioridade</span>
+                  <Switch
+                    checked={notifyUrgent}
+                    onCheckedChange={(c) => {
+                      setNotifyUrgent(c);
+                      saveNotifPrefs("nimbus_notif_urgent", String(c));
+                    }}
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Resumo diário matinal de pendências</span>
+                  <Switch
+                    checked={notifyDaily}
+                    onCheckedChange={(c) => {
+                      setNotifyDaily(c);
+                      saveNotifPrefs("nimbus_notif_daily", String(c));
+                    }}
+                  />
+                </div>
+              </div>
+
+              <Button
+                onClick={handleTestNotification}
+                size="sm"
+                variant="outline"
+                className="mt-3 w-full border-border/60 bg-secondary/30 hover:bg-secondary text-xs gap-1.5"
+              >
+                <Send className="h-3 w-3" /> Testar Envio de Notificação
+              </Button>
+            </div>
+          </div>
 
           <Button
             onClick={async () => {
@@ -1391,7 +1762,7 @@ function SettingsModal({ open, onClose }: { open: boolean; onClose: () => void }
             variant="ghost"
             className="mt-6 w-full justify-start gap-2 border border-border/60 text-rose-400 hover:bg-secondary"
           >
-            <LogOut className="h-4 w-4" /> Sign out
+            <LogOut className="h-4 w-4" /> Sair da conta
           </Button>
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
@@ -1437,22 +1808,33 @@ function Segmented<T extends string>({
   );
 }
 
-/* ---------------- Ask AI Panel ---------------- */
+/* ---------------- Functional Ask AI Copilot ---------------- */
 
 type ChatMsg = { id: string; role: "user" | "ai"; text: string };
 
-const MOCK_REPLIES = [
-  "Looking at your board, three high-priority tasks are blocked on the Q3 roadmap milestones.",
-  "Based on due dates, the most urgent work this week is auth migration to passkeys.",
-  "I'd suggest breaking that into discovery, planning, and rollout phases.",
-  "Your In Progress column is healthy — keep an eye on owners and unblockers.",
-];
-
-function AskAiPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [widthPct, setWidthPct] = useState(20);
+function AskAiPanel({
+  open,
+  onClose,
+  tasks,
+  projects,
+  onAddTask,
+  onUpdateTask,
+}: {
+  open: boolean;
+  onClose: () => void;
+  tasks: TaskDoc[];
+  projects: ProjectDoc[];
+  onAddTask?: (task: { title: string; priority?: Priority; status?: Status; project?: string }) => void;
+  onUpdateTask?: (id: string, patch: Partial<TaskDoc>) => void;
+}) {
+  const [widthPct, setWidthPct] = useState(25);
   const [resizing, setResizing] = useState(false);
   const [messages, setMessages] = useState<ChatMsg[]>([
-    { id: "m1", role: "ai", text: "Hi — I'm your Nimbus copilot. Ask me about your tasks, timelines or priorities." },
+    {
+      id: "m1",
+      role: "ai",
+      text: "Olá! Sou seu copiloto do Nimbus. Posso analisar suas tarefas, sugerir o que fazer primeiro, resumir o quadro ou até criar novas tarefas para você direto daqui!",
+    },
   ]);
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -1461,7 +1843,7 @@ function AskAiPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
     if (!resizing) return;
     const onMove = (e: MouseEvent) => {
       const pct = ((window.innerWidth - e.clientX) / window.innerWidth) * 100;
-      setWidthPct(Math.min(60, Math.max(15, pct)));
+      setWidthPct(Math.min(60, Math.max(20, pct)));
     };
     const onUp = () => setResizing(false);
     window.addEventListener("mousemove", onMove);
@@ -1476,18 +1858,88 @@ function AskAiPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages]);
 
-  const send = () => {
-    const text = input.trim();
+  const processQuery = (rawText: string): string => {
+    const text = rawText.trim();
+    if (!text) return "Digite algo para eu ajudar!";
+    const lower = text.toLowerCase();
+
+    // 1. Comando de criação de tarefa: "criar tarefa [titulo]" ou "adicionar [titulo]"
+    const createMatch = lower.match(/(?:criar|adicionar|nova)\s+(?:tarefa\s+)?(.+)/i);
+    if (createMatch && !lower.includes("resumo") && !lower.includes("status")) {
+      let taskTitle = createMatch[1].trim();
+      let priority: Priority = "med";
+      if (lower.includes("urgente") || lower.includes("alta")) {
+        priority = "high";
+        taskTitle = taskTitle.replace(/urgente|alta/gi, "").trim();
+      }
+      if (onAddTask) {
+        onAddTask({
+          title: taskTitle,
+          priority,
+          status: "todo",
+          project: projects[0]?.name ?? "Inbox",
+        });
+        return `✅ Criei a tarefa **"${taskTitle}"** com prioridade ${priority === "high" ? "Alta" : "Média"} na sua coluna **To Do**!`;
+      }
+    }
+
+    // 2. Concluir tarefa: "concluir [nome]" ou "fechar [nome]"
+    const doneMatch = lower.match(/(?:concluir|finalizar|fechar|marcar)\s+(.+)/i);
+    if (doneMatch) {
+      const searchTitle = doneMatch[1].trim();
+      const target = tasks.find((t) => t.title.toLowerCase().includes(searchTitle));
+      if (target && onUpdateTask) {
+        onUpdateTask(target.id, { status: "done" });
+        return `🎉 Marquei a tarefa **"${target.title}"** como Concluída!`;
+      }
+    }
+
+    // 3. Resumo ou status do quadro
+    if (lower.includes("resumo") || lower.includes("status") || lower.includes("quadro") || lower.includes("como está")) {
+      const todoCount = tasks.filter((t) => t.status === "todo").length;
+      const doingCount = tasks.filter((t) => t.status === "doing").length;
+      const doneCount = tasks.filter((t) => t.status === "done").length;
+      const highPrio = tasks.filter((t) => t.status !== "done" && t.priority === "high");
+
+      return `📊 **Status Atual do seu Nimbus:**\n\n• **Total de tarefas:** ${tasks.length}\n• **To Do (A Fazer):** ${todoCount}\n• **In Progress (Em andamento):** ${doingCount}\n• **Done (Concluídas):** ${doneCount}\n\n${
+        highPrio.length > 0
+          ? `⚠️ Você tem **${highPrio.length} tarefa(s) de alta prioridade** pendentes: ${highPrio.map((t) => `"${t.title}"`).join(", ")}.`
+          : "✨ Nenhuma tarefa urgente acumulada no momento!"
+      }`;
+    }
+
+    // 4. O que é urgente / prioridade
+    if (lower.includes("urgente") || lower.includes("prioridade") || lower.includes("fazer agora")) {
+      const urgentTasks = tasks.filter((t) => t.status !== "done" && t.priority === "high");
+      if (urgentTasks.length === 0) {
+        return "✨ Parabéns! Não há tarefas com prioridade Alta pendentes no seu quadro. Você pode focar nas tarefas em progresso ou escolher uma do 'To Do'!";
+      }
+      return `🔥 **Foco Urgente Recomendado:**\n\n${urgentTasks
+        .map((t, idx) => `${idx + 1}. **${t.title}** (${t.status === "doing" ? "Em andamento" : "A Fazer"}${t.due ? ` • Prazo: ${t.due}` : ""})`)
+        .join("\n")}\n\nRecomendo começar pela primeira da lista para destravar o fluxo!`;
+    }
+
+    // 5. Sugestão de divisão / breakdown
+    if (lower.includes("dividir") || lower.includes("breakdown") || lower.includes("subtarefa")) {
+      return `💡 **Dica de Breakdown:**\nPara quebrar qualquer tarefa complexa:\n1. Defina o objetivo mensurável inicial\n2. Isole as dependências ou pré-requisitos técnicos\n3. Execute a implementação mínima funcional\n4. Valide e adicione testes\n\nVocê também pode abrir o modal de detalhes de qualquer tarefa para adicionar subtarefas interativas com checkboxes!`;
+    }
+
+    // 6. Resposta padrão contextual
+    return `Entendido! Analisando seu projeto com **${tasks.length} tarefas** distribuídas em **${projects.length} projeto(s)**. Se quiser, peça para eu criar tarefas ("criar tarefa X"), listar as urgentes ("o que é urgente?") ou resumir o board!`;
+  };
+
+  const send = (overrideText?: string) => {
+    const text = (overrideText || input).trim();
     if (!text) return;
     const userMsg: ChatMsg = { id: uid(), role: "user", text };
-    const reply: ChatMsg = {
-      id: uid(),
-      role: "ai",
-      text: MOCK_REPLIES[Math.floor(Math.random() * MOCK_REPLIES.length)],
-    };
     setMessages((m) => [...m, userMsg]);
-    setInput("");
-    setTimeout(() => setMessages((m) => [...m, reply]), 500);
+    if (!overrideText) setInput("");
+
+    setTimeout(() => {
+      const replyText = processQuery(text);
+      const aiReply: ChatMsg = { id: uid(), role: "ai", text: replyText };
+      setMessages((m) => [...m, aiReply]);
+    }, 350);
   };
 
   return (
@@ -1497,7 +1949,7 @@ function AskAiPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
         "fixed inset-y-0 right-0 z-40 flex border-l border-border/60 bg-card shadow-2xl transition-transform duration-300",
         open ? "translate-x-0" : "translate-x-full",
       )}
-      style={{ width: `${widthPct}vw`, minWidth: 280 }}
+      style={{ width: `${widthPct}vw`, minWidth: 320 }}
     >
       <div
         onMouseDown={() => setResizing(true)}
@@ -1507,13 +1959,13 @@ function AskAiPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
         )}
       />
       <div className="flex h-full w-full flex-col">
-        <header className="flex items-center gap-2 border-b border-border/60 px-4 py-3">
+        <header className="flex items-center gap-2 border-b border-border/60 px-4 py-3 shrink-0">
           <div className="grid h-6 w-6 place-items-center rounded-md" style={{ background: "var(--gradient-magic)" }}>
             <Sparkles className="h-3.5 w-3.5 text-background" />
           </div>
           <div className="leading-tight">
-            <div className="text-sm font-semibold">Ask AI</div>
-            <div className="text-[10px] text-muted-foreground">Project copilot</div>
+            <div className="text-sm font-semibold">Nimbus AI</div>
+            <div className="text-[10px] text-muted-foreground">Copiloto Inteligente de Produtividade</div>
           </div>
           <button
             onClick={onClose}
@@ -1523,15 +1975,37 @@ function AskAiPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
           </button>
         </header>
 
-        <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
+        {/* Quick action prompts */}
+        <div className="flex flex-wrap gap-1.5 px-3 py-2 border-b border-border/40 bg-secondary/20 shrink-0">
+          <button
+            onClick={() => send("Resumo do quadro")}
+            className="rounded-full border border-border/60 bg-secondary/40 px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+          >
+            📊 Resumo do quadro
+          </button>
+          <button
+            onClick={() => send("O que é urgente?")}
+            className="rounded-full border border-border/60 bg-secondary/40 px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+          >
+            🔥 O que é urgente?
+          </button>
+          <button
+            onClick={() => send("Criar tarefa Revisar pendências alta prioridade")}
+            className="rounded-full border border-border/60 bg-secondary/40 px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+          >
+            ➕ Criar tarefa rápida
+          </button>
+        </div>
+
+        <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-4 min-h-0">
           {messages.map((m) => (
             <div key={m.id} className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}>
               <div
                 className={cn(
-                  "max-w-[85%] rounded-2xl px-3 py-2 text-sm",
+                  "max-w-[88%] rounded-2xl px-3.5 py-2.5 text-xs leading-relaxed whitespace-pre-wrap",
                   m.role === "user"
-                    ? "rounded-br-sm bg-secondary text-foreground"
-                    : "rounded-bl-sm border border-border/60 bg-background/60 text-foreground",
+                    ? "rounded-br-sm bg-primary text-primary-foreground font-medium"
+                    : "rounded-bl-sm border border-border/60 bg-secondary/40 text-foreground",
                 )}
               >
                 {m.text}
@@ -1540,16 +2014,16 @@ function AskAiPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
           ))}
         </div>
 
-        <div className="border-t border-border/60 p-3">
+        <div className="border-t border-border/60 p-3 shrink-0">
           <div className="flex items-center gap-2 rounded-xl border border-border/60 bg-secondary/40 px-2 py-1.5 focus-within:border-primary/60">
             <Input
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && send()}
-              placeholder="Ask about a task, timeline…"
-              className="h-7 border-0 bg-transparent px-1 text-sm shadow-none focus-visible:ring-0"
+              placeholder="Pergunte ao Nimbus ou digite 'criar tarefa...'…"
+              className="h-7 border-0 bg-transparent px-1 text-xs shadow-none focus-visible:ring-0"
             />
-            <Button size="sm" className="h-7 w-7 p-0" onClick={send}>
+            <Button size="sm" className="h-7 w-7 p-0 shrink-0" onClick={() => send()}>
               <Send className="h-3.5 w-3.5" />
             </Button>
           </div>
