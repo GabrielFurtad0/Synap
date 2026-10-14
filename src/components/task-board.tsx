@@ -149,23 +149,27 @@ export function TaskBoard() {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [createModalStatus, setCreateModalStatus] = useState<Status>("todo");
   const [createModalDate, setCreateModalDate] = useState<string | undefined>(undefined);
+  const [createModalProjectId, setCreateModalProjectId] = useState<string | null>(null);
+  const [createModalMode, setCreateModalMode] = useState<"global" | "column">("global");
   const seedingRef = useRef(false);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
-  // Shortcut ⌘N / Ctrl+N to open New Task modal
+  // Shortcut ⌘N / Ctrl+N to open New Task modal (global)
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "n") {
         e.preventDefault();
         setCreateModalStatus("todo");
+        setCreateModalProjectId(selectedProjectId);
         setCreateModalDate(undefined);
+        setCreateModalMode("global");
         setCreateModalOpen(true);
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [selectedProjectId]);
 
   // Subscribe to Firestore tasks & projects for the current user.
   useEffect(() => {
@@ -328,7 +332,9 @@ export function TaskBoard() {
         onOpenSettings={() => setSettingsOpen(true)}
         onOpenNewTask={() => {
           setCreateModalStatus("todo");
+          setCreateModalProjectId(selectedProjectId);
           setCreateModalDate(undefined);
+          setCreateModalMode("global");
           setCreateModalOpen(true);
         }}
         navCounts={navCountsFor(tasks)}
@@ -357,7 +363,9 @@ export function TaskBoard() {
           onViewMode={setViewMode}
           onNewTask={() => {
             setCreateModalStatus("todo");
+            setCreateModalProjectId(selectedProjectId);
             setCreateModalDate(undefined);
+            setCreateModalMode(selectedProjectId ? "column" : "global");
             setCreateModalOpen(true);
           }}
           title={
@@ -379,7 +387,9 @@ export function TaskBoard() {
               onOpenTask={(t) => setActiveId(t.id)}
               onAddTaskDate={(d) => {
                 setCreateModalStatus("todo");
+                setCreateModalProjectId(selectedProjectId);
                 setCreateModalDate(d);
+                setCreateModalMode(selectedProjectId ? "column" : "global");
                 setCreateModalOpen(true);
               }}
             />
@@ -397,7 +407,9 @@ export function TaskBoard() {
                     onAddTask={(title) => addTask(col.id, title)}
                     onOpenNewModal={() => {
                       setCreateModalStatus(col.id);
+                      setCreateModalProjectId(selectedProjectId ?? projects[0]?.id ?? null);
                       setCreateModalDate(undefined);
+                      setCreateModalMode("column");
                       setCreateModalOpen(true);
                     }}
                     onUpdateStatus={(taskId, st) => updateTask(taskId, { status: st })}
@@ -442,7 +454,8 @@ export function TaskBoard() {
         tags={tags}
         defaultStatus={createModalStatus}
         defaultDate={createModalDate}
-        defaultProjectId={selectedProjectId}
+        defaultProjectId={createModalProjectId ?? selectedProjectId}
+        contextMode={createModalMode}
         onCreate={(newTask) => {
           if (!user) return;
           createTask(user.uid, newTask).catch((e) => console.error("createTask failed:", e));
@@ -914,9 +927,9 @@ function Column({
         <h2 className="text-sm font-medium tracking-tight">{column.title}</h2>
         <span className="text-xs text-muted-foreground">{tasks.length}</span>
         <button
-          onClick={() => (onOpenNewModal ? onOpenNewModal() : setAdding(true))}
+          onClick={() => setAdding(true)}
           className="ml-auto rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-          title="Nova tarefa"
+          title="Nova tarefa rápida nesta coluna"
         >
           <Plus className="h-3.5 w-3.5" />
         </button>
@@ -948,30 +961,56 @@ function Column({
                 if (e.key === "Enter") submit();
                 if (e.key === "Escape") setAdding(false);
               }}
-              placeholder="Task title…"
+              placeholder={`Nova tarefa em ${column.title}…`}
               className="h-8 border-border/60 bg-secondary/40 text-sm"
             />
-            <div className="mt-2 flex gap-1.5">
-              <Button size="sm" className="h-7 px-2 text-xs" onClick={submit}>
-                Add
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-7 px-2 text-xs text-muted-foreground"
-                onClick={() => setAdding(false)}
-              >
-                Cancel
-              </Button>
+            <div className="mt-2 flex items-center justify-between">
+              <div className="flex gap-1.5">
+                <Button size="sm" className="h-7 px-2.5 text-xs" onClick={submit}>
+                  Adicionar
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 px-2 text-xs text-muted-foreground"
+                  onClick={() => setAdding(false)}
+                >
+                  Cancelar
+                </Button>
+              </div>
+              {onOpenNewModal && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAdding(false);
+                    onOpenNewModal();
+                  }}
+                  className="text-[11px] text-muted-foreground hover:text-foreground underline underline-offset-2"
+                  title="Abrir pop-up pré-preenchido com data, tags e descrição"
+                >
+                  Mais opções
+                </button>
+              )}
             </div>
           </div>
         ) : (
-          <button
-            onClick={() => (onOpenNewModal ? onOpenNewModal() : setAdding(true))}
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          >
-            <Plus className="h-3.5 w-3.5" /> Add task
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setAdding(true)}
+              className="flex flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <Plus className="h-3.5 w-3.5" /> Adicionar tarefa
+            </button>
+            {onOpenNewModal && (
+              <button
+                onClick={onOpenNewModal}
+                className="rounded p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                title="Abrir com detalhes (projeto e coluna pré-preenchidos)"
+              >
+                <Sparkles className="h-3 w-3" />
+              </button>
+            )}
+          </div>
         )}
       </div>
     </section>

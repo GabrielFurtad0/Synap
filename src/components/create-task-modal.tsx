@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Plus, X, Folder, Calendar, Tag, AlertCircle, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ export function CreateTaskModal({
   defaultStatus = "todo",
   defaultDate,
   defaultProjectId,
+  contextMode = "global",
   onCreate,
 }: {
   open: boolean;
@@ -24,6 +25,7 @@ export function CreateTaskModal({
   defaultStatus?: Status;
   defaultDate?: string;
   defaultProjectId?: string | null;
+  contextMode?: "global" | "column";
   onCreate: (task: {
     title: string;
     description?: string;
@@ -45,6 +47,20 @@ export function CreateTaskModal({
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [due, setDue] = useState<string>(defaultDate || "");
   const [customTag, setCustomTag] = useState("");
+
+  // Sincroniza estado com as props sempre que o modal abre ou os defaults mudam
+  useEffect(() => {
+    if (open) {
+      setStatus(defaultStatus || "todo");
+      setProjectId(defaultProjectId || projects[0]?.id || "");
+      setDue(defaultDate || "");
+      setTitle("");
+      setDescription("");
+      setSelectedTags([]);
+      setPriority("med");
+      setCustomTag("");
+    }
+  }, [open, defaultStatus, defaultProjectId, defaultDate, projects]);
 
   const handleSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -101,7 +117,9 @@ export function CreateTaskModal({
                 <Plus className="h-4 w-4 text-background" />
               </div>
               <DialogPrimitive.Title className="text-base font-semibold tracking-tight text-foreground">
-                Criar Nova Tarefa
+                {contextMode === "column"
+                  ? `Criar Tarefa (${status === "doing" ? "In Progress" : status === "done" ? "Done" : "To Do"})`
+                  : "Criar Nova Tarefa"}
               </DialogPrimitive.Title>
             </div>
             <DialogPrimitive.Close className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground">
@@ -135,7 +153,12 @@ export function CreateTaskModal({
 
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               <div>
-                <label className="text-xs font-medium text-muted-foreground">Projeto</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-medium text-muted-foreground">Projeto</label>
+                  {contextMode === "column" && (
+                    <span className="text-[10px] text-emerald-400 font-medium">Pré-preenchido</span>
+                  )}
+                </div>
                 <select
                   value={projectId}
                   onChange={(e) => setProjectId(e.target.value)}
@@ -150,7 +173,12 @@ export function CreateTaskModal({
               </div>
 
               <div>
-                <label className="text-xs font-medium text-muted-foreground">Coluna / Status</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-medium text-muted-foreground">Coluna / Status</label>
+                  {contextMode === "column" && (
+                    <span className="text-[10px] text-emerald-400 font-medium">Pré-preenchida</span>
+                  )}
+                </div>
                 <select
                   value={status}
                   onChange={(e) => setStatus(e.target.value as Status)}
