@@ -44,6 +44,7 @@ export type ProjectDoc = {
   userId: string;
   name: string;
   color?: string;
+  icon?: string;
 };
 
 const TASKS = "tasks";
@@ -118,6 +119,10 @@ export async function createProject(userId: string, data: Omit<ProjectDoc, "id" 
     userId,
     createdAt: serverTimestamp(),
   });
+}
+
+export async function updateProject(id: string, patch: Partial<Omit<ProjectDoc, "id" | "userId">>) {
+  await updateDoc(doc(db, PROJECTS, id), cleanObject(patch));
 }
 
 export async function deleteProject(id: string) {

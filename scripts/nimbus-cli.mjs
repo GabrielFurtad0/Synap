@@ -98,7 +98,18 @@ async function main() {
     return;
   }
 
-  console.log("Comandos disponíveis: list, get, move, note, create");
+  if (cmd === "projects") {
+    const snap = await db.collection("projects").get();
+    console.log(`\n📁 Projects (${snap.size}):\n`);
+    snap.forEach((doc) => {
+      const p = doc.data();
+      console.log(`• [${doc.id}] ${p.name} (color: ${p.color || "default"}, icon: ${p.icon || "default"})`);
+    });
+    console.log();
+    return;
+  }
+
+  console.log("Comandos disponíveis: list, get, move, note, create, projects");
 }
 
 main().catch(console.error);

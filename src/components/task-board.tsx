@@ -37,6 +37,8 @@ import {
   Phone,
   Mail,
   LayoutGrid,
+  Pencil,
+  Bot,
 } from "lucide-react";
 import {
   Popover,
@@ -64,6 +66,8 @@ import { useAuth } from "@/lib/auth-context";
 import { useUIPrefs } from "@/lib/ui-prefs-context";
 import { CreateTaskModal } from "@/components/create-task-modal";
 import { CalendarView } from "@/components/calendar-view";
+import { ProjectModal, getProjectIconComponent } from "@/components/project-modal";
+import { AntiGravityModal } from "@/components/antigravity-modal";
 import {
   subscribeTasks,
   subscribeProjects,
@@ -71,6 +75,7 @@ import {
   updateTask as fsUpdateTask,
   deleteTask as fsDeleteTask,
   createProject,
+  updateProject as fsUpdateProject,
   deleteProject,
   seedDefaultProjects,
   type TaskDoc,
@@ -151,7 +156,24 @@ export function TaskBoard() {
   const [createModalDate, setCreateModalDate] = useState<string | undefined>(undefined);
   const [createModalProjectId, setCreateModalProjectId] = useState<string | null>(null);
   const [createModalMode, setCreateModalMode] = useState<"global" | "column">("global");
+  const [projectModalOpen, setProjectModalOpen] = useState(false);
+  const [editingProject, setEditingProject] = useState<ProjectDoc | null>(null);
+  const [antiGravityOpen, setAntiGravityOpen] = useState(false);
   const seedingRef = useRef(false);
+
+  const showProjectBadge = !selectedProjectId && navFilter === "inbox";
+
+  const handleSaveProject = (data: { name: string; color: string; icon: string }) => {
+    if (!user) return;
+    if (editingProject) {
+      fsUpdateProject(editingProject.id, data).catch((e) => console.error("updateProject failed:", e));
+      toast.success(`Projeto "${data.name}" atualizado!`);
+    } else {
+      createProject(user.uid, data).catch((e) => console.error("createProject failed:", e));
+      toast.success(`Projeto "${data.name}" criado com sucesso!`);
+    }
+    setEditingProject(null);
+  };
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
@@ -329,6 +351,14 @@ export function TaskBoard() {
         projects={projects}
         onAddProject={addProject}
         onRemoveProject={removeProject}
+        onOpenCreateProject={() => {
+          setEditingProject(null);
+          setProjectModalOpen(true);
+        }}
+        onOpenEditProject={(p) => {
+          setEditingProject(p);
+          setProjectModalOpen(true);
+        }}
         onOpenSettings={() => setSettingsOpen(true)}
         onOpenNewTask={() => {
           setCreateModalStatus("todo");
@@ -358,6 +388,7 @@ export function TaskBoard() {
           dateFilter={dateFilter}
           setDateFilter={setDateFilter}
           onAskAi={() => setAskAiOpen(true)}
+          onAntiGravity={() => setAntiGravityOpen(true)}
           activeCount={filtered.length}
           viewMode={viewMode}
           onViewMode={setViewMode}
@@ -403,6 +434,8 @@ export function TaskBoard() {
                     key={col.id}
                     column={col}
                     tasks={filtered.filter((t) => t.status === col.id)}
+                    projects={projects}
+                    showProjectBadge={showProjectBadge}
                     onOpen={(t) => setActiveId(t.id)}
                     onAddTask={(title) => addTask(col.id, title)}
                     onOpenNewModal={() => {
@@ -425,7 +458,11 @@ export function TaskBoard() {
             <DragOverlay>
               {draggingTask && (
                 <div className="rotate-2 opacity-95">
-                  <CardSurface task={draggingTask} />
+                  <CardSurface
+                    task={draggingTask}
+                    showProjectBadge={showProjectBadge}
+                    projectDoc={projects.find((p) => p.id === draggingTask.projectId || p.name === draggingTask.project)}
+                  />
                 </div>
               )}
             </DragOverlay>
@@ -481,6 +518,35 @@ export function TaskBoard() {
         onUpdateTask={(id, patch) => updateTask(id, patch)}
       />
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <ProjectModal
+        open={projectModalOpen}
+        onClose={() => {
+          setProjectModalOpen(false);
+          setEditingProject(null);
+        }}
+        project={editingProject}
+        onSave={handleSaveProject}
+      />
+      <AntiGravityModal
+        open={antiGravityOpen}
+        onClose={() => setAntiGravityOpen(false)}
+        tasks={tasks}
+        projects={projects}
+        onUpdateTask={(id, patch) => updateTask(id, patch)}
+        onCreateTask={(nt) => {
+          if (!user) return;
+          createTask(user.uid, {
+            title: nt.title,
+            status: nt.status || "todo",
+            project: nt.project || "Inbox",
+            projectId: nt.projectId,
+            priority: nt.priority || "med",
+            tags: [],
+            isStarred: false,
+          }).catch(console.error);
+        }}
+        onOpenAiChat={() => setAskAiOpen(true)}
+      />
     </div>
   );
 }
@@ -517,6 +583,8 @@ function SidebarNav({
   projects,
   onAddProject,
   onRemoveProject,
+  onOpenCreateProject,
+  onOpenEditProject,
   onOpenSettings,
   onOpenNewTask,
   navCounts,
@@ -532,6 +600,8 @@ function SidebarNav({
   projects: ProjectDoc[];
   onAddProject: (name: string) => void;
   onRemoveProject: (id: string) => void;
+  onOpenCreateProject?: () => void;
+  onOpenEditProject?: (p: ProjectDoc) => void;
   onOpenSettings: () => void;
   onOpenNewTask: () => void;
   navCounts: { inbox: number; today: number; upcoming: number; starred: number };
@@ -608,40 +678,65 @@ function SidebarNav({
       <div className="mt-6 mb-2 flex items-center justify-between px-5">
         <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground/70">Projects</span>
         <button
-          onClick={() => setAddingProject((v) => !v)}
+          onClick={() => {
+            if (onOpenCreateProject) {
+              onOpenCreateProject();
+            } else {
+              setAddingProject((v) => !v);
+            }
+          }}
           className="rounded p-0.5 text-muted-foreground/70 hover:bg-accent hover:text-foreground"
-          title="Add project"
+          title="Novo Projeto (com cor e ícone)"
         >
           <Plus className="h-3 w-3" />
         </button>
       </div>
       <div className="flex flex-col gap-0.5 px-2">
-        {projects.map((p) => (
-          <button
-            key={p.id}
-            onClick={() => onSelectProject(p.id)}
-            className={cn(
-              "group flex w-full items-center gap-2.5 rounded-md px-3 py-1.5 text-left text-sm text-muted-foreground hover:bg-accent hover:text-foreground",
-              selectedProjectId === p.id && "bg-accent text-foreground",
-            )}
-          >
-            <span className={cn("h-2 w-2 rounded-full", p.color ?? "bg-violet-400")} />
-            <Folder className="h-3.5 w-3.5 opacity-60" />
-            <span className="flex-1 truncate">{p.name}</span>
-            <span
-              role="button"
-              tabIndex={0}
-              onClick={(e) => {
-                e.stopPropagation();
-                onRemoveProject(p.id);
-              }}
-              className="opacity-0 transition-opacity group-hover:opacity-100"
-              title="Delete project"
+        {projects.map((p) => {
+          const ProjectIcon = getProjectIconComponent(p.icon);
+          return (
+            <button
+              key={p.id}
+              onClick={() => onSelectProject(p.id)}
+              className={cn(
+                "group flex w-full items-center gap-2.5 rounded-md px-3 py-1.5 text-left text-sm text-muted-foreground hover:bg-accent hover:text-foreground",
+                selectedProjectId === p.id && "bg-accent text-foreground",
+              )}
             >
-              <Trash2 className="h-3 w-3" />
-            </span>
-          </button>
-        ))}
+              <span className={cn("h-2 w-2 rounded-full shrink-0", p.color ?? "bg-violet-400")} />
+              <ProjectIcon className="h-3.5 w-3.5 opacity-70 shrink-0" />
+              <span className="flex-1 truncate">{p.name}</span>
+              <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                {onOpenEditProject && (
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenEditProject(p);
+                    }}
+                    className="rounded p-0.5 hover:text-foreground"
+                    title="Editar projeto (cor e ícone)"
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </span>
+                )}
+                <span
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemoveProject(p.id);
+                  }}
+                  className="rounded p-0.5 hover:text-destructive"
+                  title="Excluir projeto"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </span>
+              </div>
+            </button>
+          );
+        })}
       </div>
       {addingProject && (
         <div className="mt-1 px-3">
@@ -739,6 +834,7 @@ function TopBar({
   dateFilter,
   setDateFilter,
   onAskAi,
+  onAntiGravity,
   activeCount,
   title,
   viewMode,
@@ -752,6 +848,7 @@ function TopBar({
   dateFilter: DateFilter;
   setDateFilter: (d: DateFilter) => void;
   onAskAi: () => void;
+  onAntiGravity?: () => void;
   activeCount: number;
   title: string;
   viewMode: "board" | "calendar";
@@ -868,6 +965,18 @@ function TopBar({
         Nova Tarefa
       </Button>
 
+      {onAntiGravity && (
+        <Button
+          onClick={onAntiGravity}
+          size="sm"
+          className="h-8 gap-1.5 border border-primary/50 bg-primary/10 text-primary hover:bg-primary/20 text-xs font-medium transition-colors"
+          title="Executar tarefas autonomamente com AntiGravity AI"
+        >
+          <Bot className="h-3.5 w-3.5 text-primary" />
+          AntiGravity
+        </Button>
+      )}
+
       <Button
         onClick={onAskAi}
         size="sm"
@@ -885,6 +994,8 @@ function TopBar({
 function Column({
   column,
   tasks,
+  projects = [],
+  showProjectBadge = false,
   onOpen,
   onAddTask,
   onOpenNewModal,
@@ -895,6 +1006,8 @@ function Column({
 }: {
   column: { id: Status; title: string; accent: string };
   tasks: TaskDoc[];
+  projects?: ProjectDoc[];
+  showProjectBadge?: boolean;
   onOpen: (t: TaskDoc) => void;
   onAddTask: (title: string) => void;
   onOpenNewModal?: () => void;
@@ -941,6 +1054,8 @@ function Column({
           <TaskCard
             key={t.id}
             task={t}
+            projectDoc={projects.find((p) => p.id === t.projectId || p.name === t.project)}
+            showProjectBadge={showProjectBadge}
             onOpen={() => onOpen(t)}
             onUpdateStatus={onUpdateStatus}
             onUpdatePriority={onUpdatePriority}
@@ -1021,6 +1136,8 @@ function Column({
 
 function TaskCard({
   task,
+  projectDoc,
+  showProjectBadge,
   onOpen,
   onUpdateStatus,
   onUpdatePriority,
@@ -1028,6 +1145,8 @@ function TaskCard({
   onDeleteTask,
 }: {
   task: TaskDoc;
+  projectDoc?: ProjectDoc;
+  showProjectBadge?: boolean;
   onOpen: () => void;
   onUpdateStatus?: (taskId: string, st: Status) => void;
   onUpdatePriority?: (taskId: string, pr: Priority) => void;
@@ -1045,7 +1164,7 @@ function TaskCard({
           onClick={onOpen}
           className={cn("cursor-grab touch-none active:cursor-grabbing", isDragging && "opacity-30")}
         >
-          <CardSurface task={task} />
+          <CardSurface task={task} projectDoc={projectDoc} showProjectBadge={showProjectBadge} />
         </div>
       </ContextMenuTrigger>
       <ContextMenuContent className="w-52 border-border/60 bg-popover text-popover-foreground">
@@ -1135,8 +1254,17 @@ function TaskCard({
   );
 }
 
-function CardSurface({ task }: { task: TaskDoc }) {
+function CardSurface({
+  task,
+  projectDoc,
+  showProjectBadge = false,
+}: {
+  task: TaskDoc;
+  projectDoc?: ProjectDoc;
+  showProjectBadge?: boolean;
+}) {
   const done = task.status === "done";
+  const ProjectIcon = getProjectIconComponent(projectDoc?.icon);
   return (
     <article
       className={cn(
@@ -1158,10 +1286,13 @@ function CardSurface({ task }: { task: TaskDoc }) {
             )}
           </h3>
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-            <span className="inline-flex items-center gap-1 rounded border border-border/60 bg-secondary/40 px-1.5 py-0.5">
-              <Folder className="h-2.5 w-2.5" />
-              {task.project}
-            </span>
+            {showProjectBadge && (
+              <span className="inline-flex items-center gap-1 rounded border border-border/60 bg-secondary/40 px-1.5 py-0.5">
+                <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", projectDoc?.color ?? "bg-violet-400")} />
+                <ProjectIcon className="h-2.5 w-2.5 shrink-0 opacity-70" />
+                <span className="truncate max-w-[120px]">{projectDoc?.name ?? task.project}</span>
+              </span>
+            )}
             {task.due && (
               <span className="inline-flex items-center gap-1">
                 <Clock className="h-3 w-3" />
@@ -1590,7 +1721,22 @@ function PanelSectionHeader({ icon, title }: { icon: React.ReactNode; title: str
 
 /* ---------------- Settings Modal ---------------- */
 
-/* ---------------- Settings Modal ---------------- */
+function formatPhone(val: string): string {
+  const digits = val.replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.length <= 2) return `(${digits}`;
+  if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  if (digits.length <= 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  if (digits.length <= 11) return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7, 11)}`;
+  // Se usuário digitar/colar com DDI (+55)
+  if (digits.startsWith("55") && digits.length <= 13) {
+    const ddd = digits.slice(2, 4);
+    const rest = digits.slice(4);
+    if (rest.length <= 5) return `+55 (${ddd}) ${rest}`;
+    return `+55 (${ddd}) ${rest.slice(0, 5)}-${rest.slice(5, 9)}`;
+  }
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7, 11)}`;
+}
 
 function SettingsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { user, signOut } = useAuth();
@@ -1598,7 +1744,7 @@ function SettingsModal({ open, onClose }: { open: boolean; onClose: () => void }
 
   const [phone, setPhone] = useState(() => {
     if (typeof window === "undefined") return "";
-    return localStorage.getItem("nimbus_notif_phone") || "";
+    return formatPhone(localStorage.getItem("nimbus_notif_phone") || "");
   });
   const [email, setEmail] = useState(() => {
     if (typeof window === "undefined") return "";
@@ -1726,10 +1872,12 @@ function SettingsModal({ open, onClose }: { open: boolean; onClose: () => void }
                 <Input
                   value={phone}
                   onChange={(e) => {
-                    setPhone(e.target.value);
-                    saveNotifPrefs("nimbus_notif_phone", e.target.value);
+                    const masked = formatPhone(e.target.value);
+                    setPhone(masked);
+                    saveNotifPrefs("nimbus_notif_phone", masked);
                   }}
-                  placeholder="+55 (11) 99999-9999"
+                  placeholder="(11) 99999-9999"
+                  maxLength={19}
                   className="h-8 border-border/60 bg-secondary/40 text-xs"
                 />
               </div>
@@ -1919,6 +2067,25 @@ function AskAiPanel({
           project: projects[0]?.name ?? "Inbox",
         });
         return `✅ Criei a tarefa **"${taskTitle}"** com prioridade ${priority === "high" ? "Alta" : "Média"} na sua coluna **To Do**!`;
+      }
+    }
+
+    // 1.5. Auto-aprimoramento / Busca e criação sob demanda ("se não houver a IA cria")
+    const needMatch = lower.match(/(?:preciso de|verificar se tem|tem|fazer|implementar|gostaria de|quero)\s+(.+)/i);
+    if (needMatch && !createMatch && !lower.includes("resumo") && !lower.includes("status") && !lower.includes("concluir")) {
+      const topic = needMatch[1].trim();
+      const existing = tasks.find((t) => t.title.toLowerCase().includes(topic.toLowerCase()));
+      if (existing) {
+        return `🔍 Encontrei uma tarefa existente relacionada:\n\n• **${existing.title}** (Status: **${existing.status}** | Prioridade: **${existing.priority || "med"}**)\n\nEla já está presente no quadro!`;
+      } else if (onAddTask) {
+        const titleCase = topic.charAt(0).toUpperCase() + topic.slice(1);
+        onAddTask({
+          title: titleCase,
+          priority: "med",
+          status: "todo",
+          project: projects[0]?.name ?? "Inbox",
+        });
+        return `✨ Não encontrei nenhuma tarefa existente sobre **"${topic}"**, então criei ela automaticamente para você na coluna **To Do**!`;
       }
     }
 
