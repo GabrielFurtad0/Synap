@@ -80,15 +80,15 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Nimbus - AI Task Manager" },
-      { name: "description", content: "Nimbus é um Smart Task Manager moderno focado em alta performance, design minimalista e copiloto de IA integrado." },
-      { name: "author", content: "Nimbus" },
-      { property: "og:title", content: "Nimbus - AI Task Manager" },
-      { property: "og:description", content: "Nimbus é um Smart Task Manager moderno focado em alta performance, design minimalista e copiloto de IA integrado." },
+      { title: "Synap - Neural Task Engine" },
+      { name: "description", content: "Synap é um Smart Task Manager moderno com design minimalista, copiloto de IA e execução autônoma AntiGravity." },
+      { name: "author", content: "Synap" },
+      { property: "og:title", content: "Synap - Neural Task Engine" },
+      { property: "og:description", content: "Synap é um Smart Task Manager moderno com design minimalista, copiloto de IA e execução autônoma AntiGravity." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { name: "twitter:title", content: "Nimbus - AI Task Manager" },
-      { name: "twitter:description", content: "Smart Task Manager com inteligência artificial, Kanban fluido e atalhos rápidos." },
+      { name: "twitter:title", content: "Synap - Neural Task Engine" },
+      { name: "twitter:description", content: "Synap - Smart Task Manager com inteligência artificial, Kanban fluido e execução autônoma." },
     ],
     links: [
       {

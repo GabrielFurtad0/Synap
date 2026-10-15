@@ -640,8 +640,8 @@ function SidebarNav({
           <Sparkles className="h-4 w-4 text-background" />
         </div>
         <div className="leading-tight">
-          <div className="text-sm font-semibold tracking-tight">Nimbus</div>
-          <div className="text-[11px] text-muted-foreground">AI Task Manager</div>
+          <div className="text-sm font-semibold tracking-tight">Synap</div>
+          <div className="text-[11px] text-muted-foreground">Neural Task Engine</div>
         </div>
       </div>
 
@@ -2020,7 +2020,7 @@ function AskAiPanel({
     {
       id: "m1",
       role: "ai",
-      text: "Olá! Sou seu copiloto do Nimbus. Posso analisar suas tarefas, sugerir o que fazer primeiro, resumir o quadro ou até criar novas tarefas para você direto daqui!",
+      text: "Olá! Sou seu copiloto do Synap. Posso analisar suas tarefas, sugerir o que fazer primeiro, resumir o quadro ou até criar novas tarefas para você direto daqui!",
     },
   ]);
   const [input, setInput] = useState("");
@@ -2107,7 +2107,7 @@ function AskAiPanel({
       const doneCount = tasks.filter((t) => t.status === "done").length;
       const highPrio = tasks.filter((t) => t.status !== "done" && t.priority === "high");
 
-      return `📊 **Status Atual do seu Nimbus:**\n\n• **Total de tarefas:** ${tasks.length}\n• **To Do (A Fazer):** ${todoCount}\n• **In Progress (Em andamento):** ${doingCount}\n• **Done (Concluídas):** ${doneCount}\n\n${
+      return `📊 **Status Atual do seu Synap:**\n\n• **Total de tarefas:** ${tasks.length}\n• **To Do (A Fazer):** ${todoCount}\n• **In Progress (Em andamento):** ${doingCount}\n• **Done (Concluídas):** ${doneCount}\n\n${
         highPrio.length > 0
           ? `⚠️ Você tem **${highPrio.length} tarefa(s) de alta prioridade** pendentes: ${highPrio.map((t) => `"${t.title}"`).join(", ")}.`
           : "✨ Nenhuma tarefa urgente acumulada no momento!"
