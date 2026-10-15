@@ -532,6 +532,7 @@ export function TaskBoard() {
         onClose={() => setAntiGravityOpen(false)}
         tasks={tasks}
         projects={projects}
+        currentProjectId={selectedProjectId}
         onUpdateTask={(id, patch) => updateTask(id, patch)}
         onCreateTask={(nt) => {
           if (!user) return;
@@ -645,18 +646,7 @@ function SidebarNav({
         </div>
       </div>
 
-      <div className="px-3">
-        <Button
-          onClick={onOpenNewTask}
-          variant="secondary"
-          className="w-full justify-start gap-2 bg-secondary/60 hover:bg-secondary"
-        >
-          <Plus className="h-4 w-4" /> New task
-          <span className="ml-auto text-[10px] text-muted-foreground">⌘N</span>
-        </Button>
-      </div>
-
-      <nav className="mt-5 flex flex-col gap-0.5 px-2">
+      <nav className="mt-2 flex flex-col gap-0.5 px-2">
         {NAV.map((item) => (
           <button
             key={item.label}
@@ -863,14 +853,15 @@ function TopBar({
   const filterActive = prioFilter.size > 0 || dateFilter !== "all";
 
   return (
-    <header className="flex items-center gap-3 px-6 py-3.5 border-b border-border/40 shrink-0">
-      <div>
-        <h1 className="text-base font-semibold tracking-tight">{title}</h1>
-        <p className="text-[11px] text-muted-foreground">{activeCount} task{activeCount === 1 ? "" : "s"}</p>
-      </div>
+    <header className="relative flex items-center justify-between gap-3 px-6 py-3.5 border-b border-border/40 shrink-0">
+      {/* Left controls: Title, Count, Search & Filter */}
+      <div className="flex items-center gap-3">
+        <div>
+          <h1 className="text-base font-semibold tracking-tight">{title}</h1>
+          <p className="text-[11px] text-muted-foreground">{activeCount} task{activeCount === 1 ? "" : "s"}</p>
+        </div>
 
-      <div className="ml-4 flex flex-1 items-center gap-2">
-        <div className="relative max-w-xs flex-1">
+        <div className="relative w-44 md:w-56">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={query}
@@ -879,6 +870,7 @@ function TopBar({
             className="h-8 border-border/60 bg-secondary/40 pl-8 text-xs placeholder:text-muted-foreground/60"
           />
         </div>
+
         <Popover>
           <PopoverTrigger asChild>
             <Button
@@ -926,9 +918,35 @@ function TopBar({
             </div>
           </PopoverContent>
         </Popover>
+      </div>
 
+      {/* Centralized & Prominent AntiGravity AI Trigger */}
+      {onAntiGravity && (
+        <div className="absolute left-1/2 -translate-x-1/2 hidden md:block">
+          <button
+            onClick={onAntiGravity}
+            className="group relative flex items-center gap-2 rounded-full px-5 py-1.5 text-xs font-semibold text-white transition-all duration-300 shadow-lg hover:shadow-2xl hover:scale-105 active:scale-95"
+            style={{
+              background: "linear-gradient(135deg, oklch(0.68 0.24 280), oklch(0.58 0.26 325))",
+              boxShadow: "0 0 24px -2px rgba(168, 85, 247, 0.6)",
+            }}
+            title="Central AntiGravity AI - Executar tarefas do projeto ou globais"
+          >
+            <div className="grid h-4 w-4 place-items-center rounded-full bg-white/20">
+              <Bot className="h-3 w-3 text-white" />
+            </div>
+            <span className="tracking-wide">AntiGravity AI</span>
+            <span className="rounded-full bg-white/20 px-2 py-0.5 text-[9px] font-bold tracking-wider uppercase text-white/95">
+              Executar
+            </span>
+          </button>
+        </div>
+      )}
+
+      {/* Right controls: Switcher, Nova Tarefa & Ask AI */}
+      <div className="flex items-center gap-2">
         {/* View Switcher: Kanban vs Calendário */}
-        <div className="ml-auto flex items-center gap-1 rounded-lg border border-border/60 bg-secondary/30 p-0.5">
+        <div className="flex items-center gap-1 rounded-lg border border-border/60 bg-secondary/30 p-0.5">
           <button
             onClick={() => onViewMode("board")}
             className={cn(
@@ -954,37 +972,25 @@ function TopBar({
             Calendário
           </button>
         </div>
-      </div>
 
-      <Button
-        onClick={onNewTask}
-        size="sm"
-        className="h-8 gap-1.5 text-xs bg-primary text-primary-foreground hover:bg-primary/90 font-medium"
-      >
-        <Plus className="h-3.5 w-3.5" />
-        Nova Tarefa
-      </Button>
-
-      {onAntiGravity && (
         <Button
-          onClick={onAntiGravity}
+          onClick={onNewTask}
           size="sm"
-          className="h-8 gap-1.5 border border-primary/50 bg-primary/10 text-primary hover:bg-primary/20 text-xs font-medium transition-colors"
-          title="Executar tarefas autonomamente com AntiGravity AI"
+          className="h-8 gap-1.5 text-xs bg-primary text-primary-foreground hover:bg-primary/90 font-medium"
         >
-          <Bot className="h-3.5 w-3.5 text-primary" />
-          AntiGravity
+          <Plus className="h-3.5 w-3.5" />
+          Nova Tarefa
         </Button>
-      )}
 
-      <Button
-        onClick={onAskAi}
-        size="sm"
-        className="h-8 gap-1.5 border border-border/60 bg-secondary/50 text-foreground hover:bg-secondary text-xs"
-      >
-        <Sparkles className="h-3.5 w-3.5" style={{ color: "var(--primary)" }} />
-        Ask AI
-      </Button>
+        <Button
+          onClick={onAskAi}
+          size="sm"
+          className="h-8 gap-1.5 border border-border/60 bg-secondary/50 text-foreground hover:bg-secondary text-xs"
+        >
+          <Sparkles className="h-3.5 w-3.5" style={{ color: "var(--primary)" }} />
+          Ask AI
+        </Button>
+      </div>
     </header>
   );
 }
