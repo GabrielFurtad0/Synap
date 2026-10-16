@@ -12,4 +12,10 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
+  vite: {
+    server: {
+      port: 8080,
+      strictPort: false, // Se a porta 8080 estiver em uso (ex: TotalTrigo), tenta automaticamente 8081, 8082...
+    },
+  },
 });
