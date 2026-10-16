@@ -7,10 +7,10 @@ export const Route = createFileRoute("/")({
   ssr: false,
   head: () => ({
     meta: [
-      { title: "Nimbus — AI Task Manager" },
-      { name: "description", content: "A focused, AI-powered dark-mode task manager with Kanban workflows and intelligent task breakdowns." },
-      { property: "og:title", content: "Nimbus — AI Task Manager" },
-      { property: "og:description", content: "A focused, AI-powered dark-mode task manager with Kanban workflows and intelligent task breakdowns." },
+      { title: "Synap - Neural Task Engine" },
+      { name: "description", content: "Synap é um Smart Task Manager moderno com design minimalista, copiloto de IA e execução autônoma AntiGravity." },
+      { property: "og:title", content: "Synap - Neural Task Engine" },
+      { property: "og:description", content: "Synap é um Smart Task Manager moderno com design minimalista, copiloto de IA e execução autônoma AntiGravity." },
     ],
   }),
   component: Index,
