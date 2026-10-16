@@ -1,13 +1,13 @@
 ---
-name: nimbus-task-manager
+name: synap-task-manager
 description: >-
-  Work with Nimbus Kanban tasks in Firestore: read backlog, update task progress,
+  Work with Synap Kanban tasks in Firestore: read backlog, update task progress,
   move tasks between columns (todo, doing, done), append developer notes, and create new tasks.
 ---
 
-# Nimbus Task Manager AI Workflow
+# Synap Task Manager (AntiGravity Workflow)
 
-This skill guides the agent on how to interact with the user's Nimbus Task Manager board.
+This skill guides the agent on how to interact with the user's Synap Task Manager board.
 
 ## Available Tools
 
