@@ -237,13 +237,26 @@ export function TaskBoard() {
     today.setHours(0, 0, 0, 0);
     const weekEnd = new Date(today);
     weekEnd.setDate(weekEnd.getDate() + 7);
+    const activeProject = selectedProjectId ? projects.find((p) => p.id === selectedProjectId) : null;
+
     return (tasks ?? [])
       .filter((t) => {
         if (!t) return false;
         if (query && !t.title?.toLowerCase().includes(query.toLowerCase())) return false;
         if (tagFilter.size && !(t.tags ?? []).some((tg) => tagFilter.has(tg))) return false;
         if (prioFilter.size && (!t.priority || !prioFilter.has(t.priority))) return false;
-        if (selectedProjectId && t.projectId !== selectedProjectId) return false;
+
+        // Project filter: match both by projectId and by project name (case-insensitive)
+        if (selectedProjectId) {
+          const matchesId = Boolean(t.projectId && t.projectId === selectedProjectId);
+          const matchesName = Boolean(
+            activeProject &&
+              t.project &&
+              t.project.trim().toLowerCase() === activeProject.name.trim().toLowerCase()
+          );
+          if (!matchesId && !matchesName) return false;
+        }
+
         if (navFilter === "starred" && !t.isStarred) return false;
         if (navFilter === "today") {
           if (!t.due) return false;
@@ -274,7 +287,7 @@ export function TaskBoard() {
           ((b as any).createdAt?._seconds ? (b as any).createdAt._seconds * 1000 : 0);
         return timeA - timeB;
       });
-  }, [tasks, query, tagFilter, prioFilter, dateFilter, navFilter, selectedProjectId]);
+  }, [tasks, query, tagFilter, prioFilter, dateFilter, navFilter, selectedProjectId, projects]);
 
   const activeTask = tasks.find((t) => t.id === activeId) ?? null;
   const draggingTask = tasks.find((t) => t.id === dragId) ?? null;

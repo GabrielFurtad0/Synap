@@ -333,11 +333,26 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     if (name === "nimbus_create_task") {
       const userId = await getUserId();
+      const targetProjectName = args.project || "Inbox";
+
+      // Resolve projectId if available
+      let resolvedProjectId = null;
+      try {
+        const pSnap = await db.collection("projects").get();
+        pSnap.forEach((pDoc) => {
+          if (pDoc.data().name?.trim().toLowerCase() === targetProjectName.trim().toLowerCase()) {
+            resolvedProjectId = pDoc.id;
+          }
+        });
+      } catch (err) {
+        console.error("Error resolving projectId:", err);
+      }
+
       const payload = {
         userId,
         title: args.title,
         status: args.status || "todo",
-        project: args.project || "Inbox",
+        project: targetProjectName,
         priority: args.priority || "med",
         tags: args.tags || [],
         subtasks: (args.subtasks || []).map((s) => ({
@@ -349,6 +364,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       };
+
+      if (resolvedProjectId) {
+        payload.projectId = resolvedProjectId;
+      }
 
       if (args.description) {
         payload.description = args.description;

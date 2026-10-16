@@ -79,11 +79,22 @@ async function main() {
   }
 
   if (cmd === "create") {
-    const [title, status = "todo", project = "Nimbus"] = args;
+    const [title, status = "todo", project = "Synap"] = args;
     if (!title) return console.error("Uso: node scripts/nimbus-cli.mjs create <titulo> [status] [projeto]");
     const snap = await db.collection("tasks").limit(1).get();
     const userId = snap.empty ? "user" : snap.docs[0].data().userId;
-    const res = await db.collection("tasks").add({
+
+    let projectId = null;
+    try {
+      const pSnap = await db.collection("projects").get();
+      pSnap.forEach((d) => {
+        if (d.data().name?.trim().toLowerCase() === project.trim().toLowerCase()) {
+          projectId = d.id;
+        }
+      });
+    } catch (e) {}
+
+    const payload = {
       userId,
       title,
       status,
@@ -93,7 +104,10 @@ async function main() {
       isStarred: false,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
-    });
+    };
+    if (projectId) payload.projectId = projectId;
+
+    const res = await db.collection("tasks").add(payload);
     console.log(`Task criada com sucesso! ID: ${res.id}`);
     return;
   }
