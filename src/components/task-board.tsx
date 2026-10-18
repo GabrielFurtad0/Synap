@@ -555,8 +555,12 @@ export function TaskBoard() {
             project: nt.project || "Inbox",
             projectId: nt.projectId,
             priority: nt.priority || "med",
-            tags: [],
+            tags: nt.tags || [],
             isStarred: false,
+            assignedTo: nt.assignedTo,
+            executionRequested: nt.executionRequested,
+            executionStatus: nt.executionStatus,
+            executionLog: nt.executionLog,
           }).catch(console.error);
         }}
         onOpenAiChat={() => setAskAiOpen(true)}

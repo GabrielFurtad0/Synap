@@ -24,6 +24,8 @@ export type SubTask = {
   children?: SubTask[];
 };
 
+export type ExecutionStatus = "idle" | "queued" | "running" | "completed" | "error";
+
 export type TaskDoc = {
   id: string;
   userId: string;
@@ -37,6 +39,10 @@ export type TaskDoc = {
   tags: string[];
   subtasks?: SubTask[];
   isStarred?: boolean;
+  assignedTo?: string;
+  executionRequested?: boolean;
+  executionStatus?: ExecutionStatus;
+  executionLog?: string;
 };
 
 export type ProjectDoc = {

@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import type { TaskDoc, ProjectDoc, Priority, Status } from "@/lib/firestore";
+import type { TaskDoc, ProjectDoc, Priority, Status, ExecutionStatus } from "@/lib/firestore";
 
 export function AntiGravityModal({
   open,
@@ -45,6 +45,10 @@ export function AntiGravityModal({
     project: string;
     projectId?: string;
     tags: string[];
+    assignedTo?: string;
+    executionRequested?: boolean;
+    executionStatus?: ExecutionStatus;
+    executionLog?: string;
   }) => void;
   onOpenAiChat?: () => void;
 }) {
@@ -81,49 +85,44 @@ export function AntiGravityModal({
   const doingTasks = scopedTasks.filter((t) => t.status === "doing");
   const doneTasks = scopedTasks.filter((t) => t.status === "done");
 
-  const executeTask = async (task: TaskDoc) => {
-    setRunning(true);
-    toast.info(`AntiGravity iniciou a execução da tarefa: "${task.title}"`);
+  const activeWorkerTasks = scopedTasks.filter(
+    (t) => t.executionRequested || t.executionStatus === "running" || t.executionStatus === "queued"
+  );
 
-    // 1. Move to doing
-    onUpdateTask(task.id, { status: "doing" });
-
-    // 2. Simulate AI agent execution
-    await new Promise((r) => setTimeout(r, 800));
-
-    // 3. Move to done with subtask or completion note
+  const executeTask = (task: TaskDoc) => {
+    const nowStr = new Date().toLocaleTimeString();
     onUpdateTask(task.id, {
-      status: "done",
-      description: task.description
-        ? `${task.description}\n\n[AntiGravity]: Tarefa executada e validada pelo agente autônomo AGY.`
-        : `[AntiGravity]: Tarefa executada e validada com sucesso pelo agente autônomo AGY.`,
+      status: "doing",
+      assignedTo: "AntiGravity",
+      executionRequested: true,
+      executionStatus: "queued",
+      executionLog: `[${nowStr}] 🚀 Enviada para a fila de execução autônoma do AntiGravity Worker.`,
     });
 
-    toast.success(`AntiGravity concluiu com sucesso: "${task.title}"!`);
-    setRunning(false);
+    toast.info(`Tarefa enviada para o AntiGravity Worker!`, {
+      description: `O worker local executará na pasta: "${task.title}"`,
+    });
   };
 
-  const executeAllTasks = async () => {
+  const executeAllTasks = () => {
     if (todoTasks.length === 0) {
       toast.info(`Não há tarefas pendentes em To Do no escopo "${activeScopeName}"!`);
       return;
     }
-    setRunning(true);
-    toast.info(`AntiGravity iniciando lote de ${todoTasks.length} tarefa(s) em "${activeScopeName}"...`);
+    const nowStr = new Date().toLocaleTimeString();
+    toast.info(`Despachando ${todoTasks.length} tarefa(s) para o AntiGravity Worker...`);
 
     for (const t of todoTasks) {
-      onUpdateTask(t.id, { status: "doing" });
-      await new Promise((r) => setTimeout(r, 600));
       onUpdateTask(t.id, {
-        status: "done",
-        description: t.description
-          ? `${t.description}\n\n[AntiGravity]: Executada automaticamente pelo AGY.`
-          : `[AntiGravity]: Executada automaticamente pelo AGY.`,
+        status: "doing",
+        assignedTo: "AntiGravity",
+        executionRequested: true,
+        executionStatus: "queued",
+        executionLog: `[${nowStr}] 🚀 Enfileirada para o worker do AntiGravity.`,
       });
     }
 
-    toast.success(`AntiGravity concluiu todas as ${todoTasks.length} tarefas de "${activeScopeName}"!`);
-    setRunning(false);
+    toast.success(`${todoTasks.length} tarefa(s) enviadas para a fila de execução real!`);
   };
 
   const handleCustomPrompt = (e?: React.FormEvent) => {
@@ -138,14 +137,18 @@ export function AntiGravityModal({
 
     onCreateTask({
       title: text,
-      status: "todo",
+      status: "doing",
       priority: "high",
       project: targetProject?.name || "Synap",
       projectId: targetProject?.id,
       tags: ["agy-task"],
+      assignedTo: "AntiGravity",
+      executionRequested: true,
+      executionStatus: "queued",
+      executionLog: `[${new Date().toLocaleTimeString()}] Criada via prompt e despachada para o AntiGravity Worker.`,
     });
 
-    toast.success(`Tarefa gerada via prompt do AntiGravity: "${text}" (${targetProject?.name || "Synap"})`);
+    toast.success(`Tarefa criada e enviada para o AntiGravity Worker: "${text}"`);
     setPrompt("");
   };
 
@@ -304,13 +307,54 @@ export function AntiGravityModal({
             )}
           </div>
 
+          {/* Active Worker Tasks (Tarefas em Execução Real pelo Worker) */}
+          {activeWorkerTasks.length > 0 && (
+            <div className="mt-4 rounded-xl border border-primary/40 bg-primary/5 p-3">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-semibold uppercase tracking-wider text-primary flex items-center gap-1.5">
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                  AntiGravity Worker Ativo ({activeWorkerTasks.length})
+                </span>
+                <Badge variant="outline" className="border-emerald-500/40 text-emerald-400 text-[10px] animate-pulse">
+                  Worker Conectado
+                </Badge>
+              </div>
+
+              <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                {activeWorkerTasks.map((t) => (
+                  <div key={t.id} className="rounded-lg border border-border/60 bg-card/90 p-2 text-xs">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-medium text-foreground truncate">{t.title}</span>
+                      <Badge
+                        variant="secondary"
+                        className={cn(
+                          "text-[9px] px-1.5 py-0 shrink-0",
+                          t.executionStatus === "running"
+                            ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                            : "bg-primary/20 text-primary border border-primary/30"
+                        )}
+                      >
+                        {t.executionStatus === "running" ? "⚙️ Processando arquivos..." : "⏳ Na fila"}
+                      </Badge>
+                    </div>
+                    {t.executionLog && (
+                      <p className="font-mono text-[10px] text-muted-foreground mt-1 whitespace-pre-line line-clamp-2 bg-secondary/50 p-1.5 rounded border border-border/30">
+                        {t.executionLog}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Task list in To Do */}
           <div className="mt-5">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Fila de Execução ({todoTasks.length})
               </span>
-              <span className="text-[10px] text-muted-foreground">Disparar individualmente com AGY</span>
+              <span className="text-[10px] text-muted-foreground">Disparar individualmente para o AGY</span>
             </div>
 
             {todoTasks.length === 0 ? (
@@ -347,41 +391,52 @@ export function AntiGravityModal({
                               {taskProj.path.split(/[/\\]/).filter(Boolean).pop()}
                             </span>
                           )}
-                        {t.priority && (
-                          <span
-                            className={cn(
-                              "font-medium",
-                              t.priority === "high"
-                                ? "text-rose-400"
-                                : t.priority === "med"
-                                ? "text-amber-400"
-                                : "text-muted-foreground"
-                            )}
-                          >
-                            • Prioridade {t.priority}
-                          </span>
-                        )}
-                        {t.due && (
-                          <span className="inline-flex items-center gap-1 text-muted-foreground">
-                            <Clock className="h-2.5 w-2.5" /> {t.due}
-                          </span>
-                        )}
+                          {t.priority && (
+                            <span
+                              className={cn(
+                                "font-medium",
+                                t.priority === "high"
+                                  ? "text-rose-400"
+                                  : t.priority === "med"
+                                  ? "text-amber-400"
+                                  : "text-muted-foreground"
+                              )}
+                            >
+                              • Prioridade {t.priority}
+                            </span>
+                          )}
+                          {t.due && (
+                            <span className="inline-flex items-center gap-1 text-muted-foreground">
+                              <Clock className="h-2.5 w-2.5" /> {t.due}
+                            </span>
+                          )}
+                        </div>
                       </div>
+                      {t.executionStatus === "running" ? (
+                        <Badge variant="outline" className="h-7 px-2.5 text-[11px] gap-1 border-amber-500/50 text-amber-400 bg-amber-500/10 shrink-0">
+                          <RefreshCw className="h-3 w-3 animate-spin" />
+                          Executando...
+                        </Badge>
+                      ) : t.executionRequested ? (
+                        <Badge variant="outline" className="h-7 px-2.5 text-[11px] gap-1 border-primary/50 text-primary bg-primary/10 shrink-0">
+                          <Clock className="h-3 w-3" />
+                          Na Fila
+                        </Badge>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => executeTask(t)}
+                          className="h-7 px-2.5 text-[11px] gap-1 hover:bg-primary hover:text-primary-foreground transition-colors shrink-0"
+                        >
+                          <Bot className="h-3 w-3" />
+                          Executar com AGY
+                        </Button>
+                      )}
                     </div>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      disabled={running}
-                      onClick={() => executeTask(t)}
-                      className="h-7 px-2.5 text-[11px] gap-1 hover:bg-primary hover:text-primary-foreground transition-colors shrink-0"
-                    >
-                      <Bot className="h-3 w-3" />
-                      Executar com AGY
-                    </Button>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
             )}
           </div>
 
