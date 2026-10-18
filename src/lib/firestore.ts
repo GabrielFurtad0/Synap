@@ -16,11 +16,16 @@ import { db } from "./firebase";
 export type Status = "todo" | "doing" | "done";
 export type Priority = "low" | "med" | "high";
 
+export type SubtaskMode = "checklist" | "qa";
+
 export type SubTask = {
   id: string;
   label: string;
   due?: string;
   done?: boolean;
+  answer?: string;
+  answeredBy?: string;
+  answeredAt?: string;
   children?: SubTask[];
 };
 
@@ -38,6 +43,7 @@ export type TaskDoc = {
   priority?: Priority;
   tags: string[];
   subtasks?: SubTask[];
+  subtaskMode?: SubtaskMode;
   isStarred?: boolean;
   assignedTo?: string;
   executionRequested?: boolean;

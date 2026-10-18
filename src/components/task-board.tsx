@@ -39,6 +39,11 @@ import {
   LayoutGrid,
   Pencil,
   Bot,
+  MessageSquare,
+  HelpCircle,
+  ListChecks,
+  MessageSquareQuote,
+  CornerDownRight,
 } from "lucide-react";
 import {
   Popover,
@@ -83,6 +88,7 @@ import {
   type Status,
   type Priority,
   type SubTask,
+  type SubtaskMode,
 } from "@/lib/firestore";
 
 const COLUMNS: { id: Status; title: string; accent: string }[] = [
@@ -1323,6 +1329,39 @@ function CardSurface({
               </span>
             )}
             {task.priority && <PriorityDot p={task.priority} />}
+            {task.subtasks && task.subtasks.length > 0 && (
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium border",
+                  task.subtaskMode === "qa"
+                    ? task.subtasks.every((s) => s.done)
+                      ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
+                      : "border-sky-500/40 bg-sky-500/10 text-sky-300"
+                    : "border-border/60 bg-secondary/40 text-muted-foreground"
+                )}
+                title={
+                  task.subtaskMode === "qa"
+                    ? `${task.subtasks.filter((s) => s.done).length} de ${task.subtasks.length} perguntas respondidas`
+                    : `${task.subtasks.filter((s) => s.done).length} de ${task.subtasks.length} subtarefas concluídas`
+                }
+              >
+                {task.subtaskMode === "qa" ? (
+                  <>
+                    <MessageSquare className="h-2.5 w-2.5 shrink-0" />
+                    <span>
+                      {task.subtasks.filter((s) => s.done).length}/{task.subtasks.length} Q&A
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <ListChecks className="h-2.5 w-2.5 shrink-0" />
+                    <span>
+                      {task.subtasks.filter((s) => s.done).length}/{task.subtasks.length}
+                    </span>
+                  </>
+                )}
+              </span>
+            )}
           </div>
           {(task.tags?.length ?? 0) > 0 && (
             <div className="mt-2 flex flex-wrap gap-1">
@@ -1646,8 +1685,8 @@ function TagsEditor({
 /* ---------------- Breakdown & Concept Map ---------------- */
 
 function Breakdown({ task, onUpdate }: { task: TaskDoc; onUpdate: (patch: Partial<TaskDoc>) => void }) {
-  // Per-task subtasks ONLY — no shared mock. Empty until the user adds them.
   const subtasks = task.subtasks ?? [];
+  const mode: SubtaskMode = task.subtaskMode ?? "checklist";
 
   const setSubtree = (nodes: SubTask[]) => onUpdate({ subtasks: nodes });
 
@@ -1658,32 +1697,393 @@ function Breakdown({ task, onUpdate }: { task: TaskDoc; onUpdate: (patch: Partia
       return n;
     });
 
-  const toggle = (id: string, done: boolean) => setSubtree(mapTree(subtasks, id, (n) => ({ ...n, done })));
+  const toggle = (id: string, done: boolean) =>
+    setSubtree(mapTree(subtasks, id, (n) => ({ ...n, done })));
 
-  const addRoot = () =>
-    setSubtree([...subtasks, { id: uid(), label: "New subtask", done: false }]);
+  const updateNode = (id: string, patch: Partial<SubTask>) =>
+    setSubtree(mapTree(subtasks, id, (n) => ({ ...n, ...patch })));
+
+  const deleteNode = (id: string) => {
+    const filterTree = (nodes: SubTask[]): SubTask[] =>
+      nodes
+        .filter((n) => n.id !== id)
+        .map((n) => (n.children ? { ...n, children: filterTree(n.children) } : n));
+    setSubtree(filterTree(subtasks));
+  };
+
+  const addRoot = () => {
+    if (mode === "qa") {
+      setSubtree([
+        ...subtasks,
+        {
+          id: uid(),
+          label: "Nova pergunta / ponto de validação...",
+          done: false,
+        },
+      ]);
+    } else {
+      setSubtree([...subtasks, { id: uid(), label: "Nova subtarefa", done: false }]);
+    }
+  };
+
+  const answeredCount = subtasks.filter((s) => s.done || !!s.answer?.trim()).length;
 
   return (
     <section>
-      <PanelSectionHeader icon={<Sparkles className="h-3.5 w-3.5" />} title="AI-powered task breakdown" />
+      {/* Header with Mode Switcher */}
+      <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-border/50">
+        <PanelSectionHeader
+          icon={mode === "qa" ? <HelpCircle className="h-3.5 w-3.5" /> : <Sparkles className="h-3.5 w-3.5" />}
+          title={mode === "qa" ? "Validação & Perguntas (Q&A)" : "Breakdown de Tarefas"}
+        />
+
+        <div className="flex items-center rounded-lg border border-border/60 bg-secondary/40 p-0.5 text-xs">
+          <button
+            type="button"
+            onClick={() => onUpdate({ subtaskMode: "checklist" })}
+            className={cn(
+              "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors",
+              mode === "checklist"
+                ? "bg-card text-foreground border border-border/60 shadow-sm font-semibold"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <ListChecks className="h-3 w-3" />
+            Checklist
+          </button>
+          <button
+            type="button"
+            onClick={() => onUpdate({ subtaskMode: "qa" })}
+            className={cn(
+              "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors",
+              mode === "qa"
+                ? "bg-primary text-primary-foreground shadow-sm font-semibold"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <MessageSquare className="h-3 w-3" />
+            Modo Q&A
+          </button>
+        </div>
+      </div>
+
+      {/* Progress & metrics in Q&A mode */}
+      {mode === "qa" && subtasks.length > 0 && (
+        <div className="mt-3 flex items-center justify-between rounded-lg border border-border/50 bg-secondary/30 px-3 py-2 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="font-medium text-foreground">
+              {answeredCount}/{subtasks.length} perguntas respondidas
+            </span>
+            <span className="text-[11px] text-muted-foreground">
+              ({Math.round((answeredCount / subtasks.length) * 100)}%)
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            {answeredCount === subtasks.length ? (
+              <Badge variant="outline" className="border-emerald-500/40 text-emerald-400 text-[10px] gap-1">
+                <Check className="h-2.5 w-2.5" /> Todas Respondidas
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="border-amber-500/40 text-amber-400 text-[10px] gap-1">
+                <Clock className="h-2.5 w-2.5" /> {subtasks.length - answeredCount} Pendente{subtasks.length - answeredCount > 1 ? "s" : ""}
+              </Badge>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* List items */}
       {subtasks.length === 0 ? (
-        <p className="mt-3 text-xs text-muted-foreground">
-          No subtasks yet — add the first step to break this task down.
-        </p>
+        <div className="mt-4 rounded-xl border border-dashed border-border/60 p-6 text-center">
+          <p className="text-xs text-muted-foreground">
+            {mode === "qa"
+              ? "Nenhuma pergunta cadastrada ainda. Adicione as dúvidas ou definições que precisam ser validadas."
+              : "Nenhuma subtarefa criada ainda. Adicione o primeiro passo para dividir este trabalho."}
+          </p>
+        </div>
+      ) : mode === "qa" ? (
+        <div className="mt-3 space-y-2.5">
+          {subtasks.map((s, idx) => (
+            <QaNode
+              key={s.id}
+              node={s}
+              index={idx + 1}
+              onUpdateNode={updateNode}
+              onDeleteNode={deleteNode}
+            />
+          ))}
+        </div>
       ) : (
         <ul className="mt-3 space-y-1">
           {subtasks.map((s) => (
-            <SubtaskNode key={s.id} node={s} depth={0} onToggle={toggle} />
+            <SubtaskNode
+              key={s.id}
+              node={s}
+              depth={0}
+              onToggle={toggle}
+              onDelete={deleteNode}
+              onUpdateLabel={(id, label) => updateNode(id, { label })}
+            />
           ))}
         </ul>
       )}
+
       <button
+        type="button"
         onClick={addRoot}
-        className="mt-4 inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+        className="mt-4 inline-flex items-center gap-1.5 rounded-md border border-dashed border-border/60 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-border hover:bg-secondary/40 hover:text-foreground"
       >
-        <Plus className="h-3 w-3" /> Add subtask
+        <Plus className="h-3 w-3" />
+        {mode === "qa" ? "Adicionar Pergunta de Validação (Q&A)" : "Adicionar Subtarefa"}
       </button>
     </section>
+  );
+}
+
+function QaNode({
+  node,
+  index,
+  onUpdateNode,
+  onDeleteNode,
+}: {
+  node: SubTask;
+  index: number;
+  onUpdateNode: (id: string, patch: Partial<SubTask>) => void;
+  onDeleteNode: (id: string) => void;
+}) {
+  const [editingQuestion, setEditingQuestion] = useState(false);
+  const [questionText, setQuestionText] = useState(node.label);
+  const [isAnswering, setIsAnswering] = useState(false);
+  const [answerInput, setAnswerInput] = useState(node.answer || "");
+  const [answeredByInput, setAnsweredByInput] = useState(node.answeredBy || "Sr. Sérgio");
+
+  const hasAnswer = !!node.answer?.trim();
+
+  const handleSaveQuestion = () => {
+    if (questionText.trim()) {
+      onUpdateNode(node.id, { label: questionText.trim() });
+    }
+    setEditingQuestion(false);
+  };
+
+  const handleSaveAnswer = () => {
+    if (!answerInput.trim()) return;
+    const nowStr = new Date().toLocaleDateString("pt-BR", {
+      day: "2-digit",
+      month: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    onUpdateNode(node.id, {
+      answer: answerInput.trim(),
+      answeredBy: answeredByInput.trim() || "Operação",
+      answeredAt: nowStr,
+      done: true,
+    });
+    setIsAnswering(false);
+  };
+
+  const handleClearAnswer = () => {
+    onUpdateNode(node.id, {
+      answer: undefined,
+      answeredBy: undefined,
+      answeredAt: undefined,
+      done: false,
+    });
+    setAnswerInput("");
+    setIsAnswering(false);
+  };
+
+  return (
+    <div
+      className={cn(
+        "rounded-xl border transition-all p-3 text-xs bg-card/90",
+        hasAnswer
+          ? "border-emerald-500/30 hover:border-emerald-500/50"
+          : "border-border/60 hover:border-border"
+      )}
+    >
+      {/* Question Header */}
+      <div className="flex items-start justify-between gap-2.5">
+        <div className="flex items-start gap-2 flex-1 min-w-0">
+          <span
+            className={cn(
+              "grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] font-bold mt-0.5",
+              hasAnswer
+                ? "bg-emerald-500/20 text-emerald-400"
+                : "bg-amber-500/20 text-amber-400"
+            )}
+          >
+            {index}
+          </span>
+
+          <div className="flex-1 min-w-0">
+            {editingQuestion ? (
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="text"
+                  value={questionText}
+                  onChange={(e) => setQuestionText(e.target.value)}
+                  className="flex-1 rounded border border-border bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleSaveQuestion();
+                    if (e.key === "Escape") setEditingQuestion(false);
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={handleSaveQuestion}
+                  className="rounded bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground hover:bg-primary/90"
+                >
+                  OK
+                </button>
+              </div>
+            ) : (
+              <div className="group/q flex items-center gap-1.5">
+                <p className="font-medium text-foreground leading-snug">
+                  {node.label}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuestionText(node.label);
+                    setEditingQuestion(true);
+                  }}
+                  className="opacity-0 group-hover/q:opacity-100 text-muted-foreground hover:text-foreground p-0.5 transition-opacity"
+                  title="Editar pergunta"
+                >
+                  <Pencil className="h-2.5 w-2.5" />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Status Badge & Actions */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {hasAnswer ? (
+            <Badge variant="outline" className="border-emerald-500/40 text-emerald-400 bg-emerald-500/10 text-[10px] gap-1 px-1.5 py-0">
+              <Check className="h-2.5 w-2.5" /> Respondida
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="border-amber-500/40 text-amber-400 bg-amber-500/10 text-[10px] gap-1 px-1.5 py-0">
+              <Clock className="h-2.5 w-2.5" /> Pendente
+            </Badge>
+          )}
+
+          <button
+            type="button"
+            onClick={() => onDeleteNode(node.id)}
+            className="p-1 text-muted-foreground/60 hover:text-rose-400 transition-colors rounded"
+            title="Excluir pergunta"
+          >
+            <Trash2 className="h-3 w-3" />
+          </button>
+        </div>
+      </div>
+
+      {/* Answer View or Answer Form */}
+      {hasAnswer && !isAnswering ? (
+        <div className="mt-2.5 ml-7 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-2.5 text-xs">
+          <div className="flex items-center justify-between text-[10px] text-emerald-400/90 font-medium mb-1">
+            <span className="flex items-center gap-1">
+              <MessageSquareQuote className="h-3 w-3" />
+              Resposta Confirmada:
+            </span>
+            {node.answeredBy && (
+              <span className="text-muted-foreground">
+                Por: <strong className="text-foreground">{node.answeredBy}</strong>
+                {node.answeredAt ? ` (${node.answeredAt})` : ""}
+              </span>
+            )}
+          </div>
+
+          <p className="text-foreground/90 whitespace-pre-wrap leading-relaxed text-xs">
+            {node.answer}
+          </p>
+
+          <div className="mt-2 flex items-center justify-end gap-2 border-t border-emerald-500/15 pt-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                setAnswerInput(node.answer || "");
+                setAnsweredByInput(node.answeredBy || "Sr. Sérgio");
+                setIsAnswering(true);
+              }}
+              className="text-[10px] text-muted-foreground hover:text-foreground"
+            >
+              Editar Resposta
+            </button>
+            <button
+              type="button"
+              onClick={handleClearAnswer}
+              className="text-[10px] text-rose-400 hover:text-rose-300"
+            >
+              Remover Resposta
+            </button>
+          </div>
+        </div>
+      ) : isAnswering ? (
+        <div className="mt-2.5 ml-7 rounded-lg border border-border/60 bg-secondary/30 p-2.5 space-y-2">
+          <label className="text-[11px] font-medium text-muted-foreground block flex items-center gap-1">
+            <CornerDownRight className="h-3 w-3 text-primary" />
+            Registrar Resposta / Decisão:
+          </label>
+          <textarea
+            value={answerInput}
+            onChange={(e) => setAnswerInput(e.target.value)}
+            placeholder="Digite a resposta ou definição do Sr. Sérgio / operação..."
+            className="w-full rounded-md border border-border/60 bg-background p-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary min-h-[60px]"
+            autoFocus
+          />
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+            <div className="flex items-center gap-1.5 text-[11px]">
+              <span className="text-muted-foreground text-[10px]">Quem respondeu:</span>
+              <input
+                type="text"
+                value={answeredByInput}
+                onChange={(e) => setAnsweredByInput(e.target.value)}
+                placeholder="Ex: Sr. Sérgio"
+                className="h-6 w-28 rounded border border-border/60 bg-background px-1.5 text-[11px] text-foreground"
+              />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setIsAnswering(false)}
+                className="rounded px-2 py-1 text-xs text-muted-foreground hover:bg-secondary"
+              >
+                Cancelar
+              </button>
+              <Button
+                size="sm"
+                onClick={handleSaveAnswer}
+                disabled={!answerInput.trim()}
+                className="h-6 px-2.5 text-[11px] bg-primary text-primary-foreground gap-1"
+              >
+                <Check className="h-3 w-3" />
+                Salvar Resposta
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-2 ml-7">
+          <button
+            type="button"
+            onClick={() => {
+              setAnswerInput("");
+              setIsAnswering(true);
+            }}
+            className="inline-flex items-center gap-1 text-[11px] text-primary/90 hover:text-primary transition-colors font-medium"
+          >
+            <MessageSquare className="h-3 w-3" />
+            Adicionar Resposta...
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1691,11 +2091,25 @@ function SubtaskNode({
   node,
   depth,
   onToggle,
+  onDelete,
+  onUpdateLabel,
 }: {
   node: SubTask;
   depth: number;
   onToggle: (id: string, done: boolean) => void;
+  onDelete?: (id: string) => void;
+  onUpdateLabel?: (id: string, label: string) => void;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(node.label);
+
+  const handleSave = () => {
+    if (text.trim() && onUpdateLabel) {
+      onUpdateLabel(node.id, text.trim());
+    }
+    setEditing(false);
+  };
+
   return (
     <li>
       <div
@@ -1707,20 +2121,69 @@ function SubtaskNode({
           onCheckedChange={(v) => onToggle(node.id, !!v)}
           className="h-3.5 w-3.5 rounded-[4px] border-border data-[state=checked]:border-primary data-[state=checked]:bg-primary"
         />
-        <span className={cn("flex-1 text-sm", node.done ? "text-muted-foreground line-through" : "text-foreground")}>
-          {node.label}
-        </span>
+        {editing ? (
+          <div className="flex-1 flex items-center gap-1">
+            <input
+              type="text"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              className="flex-1 rounded border border-border bg-background px-1.5 py-0.5 text-xs text-foreground focus:outline-none"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleSave();
+                if (e.key === "Escape") setEditing(false);
+              }}
+            />
+            <button
+              type="button"
+              onClick={handleSave}
+              className="text-[10px] bg-primary text-primary-foreground px-1.5 py-0.5 rounded"
+            >
+              OK
+            </button>
+          </div>
+        ) : (
+          <span
+            onClick={() => {
+              setText(node.label);
+              setEditing(true);
+            }}
+            className={cn(
+              "flex-1 text-sm cursor-text",
+              node.done ? "text-muted-foreground line-through" : "text-foreground"
+            )}
+          >
+            {node.label}
+          </span>
+        )}
         {node.due && (
           <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
             <Clock className="h-3 w-3" />
             {node.due}
           </span>
         )}
+        {onDelete && (
+          <button
+            type="button"
+            onClick={() => onDelete(node.id)}
+            className="opacity-0 group-hover:opacity-100 p-0.5 text-muted-foreground hover:text-rose-400 transition-opacity"
+            title="Remover"
+          >
+            <Trash2 className="h-3 w-3" />
+          </button>
+        )}
       </div>
       {node.children && (
         <ul className="ml-4 border-l border-border/40">
           {node.children.map((c) => (
-            <SubtaskNode key={c.id} node={c} depth={depth + 1} onToggle={onToggle} />
+            <SubtaskNode
+              key={c.id}
+              node={c}
+              depth={depth + 1}
+              onToggle={onToggle}
+              onDelete={onDelete}
+              onUpdateLabel={onUpdateLabel}
+            />
           ))}
         </ul>
       )}
