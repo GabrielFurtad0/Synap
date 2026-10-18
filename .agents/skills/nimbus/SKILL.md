@@ -24,7 +24,8 @@ The `nimbus` MCP server exposes:
 When the user asks you to implement or take on a task from the board:
 
 1. **Discover:** Call `nimbus_list_tasks({ status: "todo" })` to see what needs to be done.
-2. **Select & Inspect:** Call `nimbus_get_task({ taskId })` to read the full context, acceptance criteria, and subtasks.
+2. **Select & Inspect:** Call `nimbus_get_task({ taskId })` to read the full context, acceptance criteria, subtasks, and `projectPath`.
+   - **Multi-Project Routing:** If `projectPath` is present (or found via `nimbus_list_projects()`), operate directly in that directory (e.g. `C:\Users\PC-Gabriel\Documents\antigravity\TotalTrigo`). All terminal commands, edits, and tests must target that project folder.
 3. **Start:** Call `nimbus_update_task({ taskId, status: "doing" })` so the user sees the card move to "In Progress" in real time.
-4. **Implement:** Write the code, run tests, and fix any issues in the workspace.
+4. **Implement:** Write the code, run tests, and fix any issues in the target project's directory.
 5. **Report & Complete:** Call `nimbus_update_task({ taskId, status: "done", appendNotes: "Summary of changes and validation..." })` to record what was accomplished and move the task to "Done".

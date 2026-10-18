@@ -71,12 +71,13 @@ export function ProjectModal({
   open: boolean;
   onClose: () => void;
   project?: ProjectDoc | null;
-  onSave: (data: { name: string; color: string; icon: string }) => void;
+  onSave: (data: { name: string; color: string; icon: string; path?: string }) => void;
 }) {
   const isEditing = !!project;
   const [name, setName] = useState("");
   const [color, setColor] = useState("bg-violet-400");
   const [icon, setIcon] = useState("folder");
+  const [path, setPath] = useState("");
 
   useEffect(() => {
     if (open) {
@@ -84,10 +85,12 @@ export function ProjectModal({
         setName(project.name);
         setColor(project.color || "bg-violet-400");
         setIcon(project.icon || "folder");
+        setPath(project.path || "");
       } else {
         setName("");
         setColor(PROJECT_COLORS[Math.floor(Math.random() * PROJECT_COLORS.length)].id);
         setIcon("folder");
+        setPath("");
       }
     }
   }, [open, project]);
@@ -96,7 +99,7 @@ export function ProjectModal({
     if (e) e.preventDefault();
     const cleanName = name.trim();
     if (!cleanName) return;
-    onSave({ name: cleanName, color, icon });
+    onSave({ name: cleanName, color, icon, path: path.trim() || undefined });
     onClose();
   };
 
@@ -184,6 +187,25 @@ export function ProjectModal({
                   );
                 })}
               </div>
+            </div>
+
+            {/* Caminho Local do Repositório (AntiGravity) */}
+            <div>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                  <Terminal className="h-3 w-3 text-primary" /> Caminho do Projeto no PC (AntiGravity)
+                </label>
+                <span className="text-[10px] text-muted-foreground">Opcional</span>
+              </div>
+              <Input
+                value={path}
+                onChange={(e) => setPath(e.target.value)}
+                placeholder="Ex: C:\Users\PC-Gabriel\Documents\antigravity\TotalTrigo"
+                className="mt-1 border-border/60 bg-secondary/40 text-xs font-mono"
+              />
+              <p className="mt-1 text-[11px] text-muted-foreground/75">
+                Diretório onde o código deste projeto fica no seu computador para o AntiGravity saber onde programar.
+              </p>
             </div>
 
             <div className="flex justify-end gap-2 pt-2 border-t border-border/60">

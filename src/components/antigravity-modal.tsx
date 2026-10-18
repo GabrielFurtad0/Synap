@@ -12,6 +12,7 @@ import {
   X,
   RefreshCw,
   Cpu,
+  Terminal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -59,10 +60,13 @@ export function AntiGravityModal({
     }
   }, [open, currentProjectId]);
 
-  const activeScopeName =
+  const selectedProject =
     selectedProjectId === "all"
-      ? "Todos os Projetos"
-      : projects.find((p) => p.id === selectedProjectId)?.name || "Projeto Selecionado";
+      ? null
+      : projects.find((p) => p.id === selectedProjectId) || null;
+
+  const activeScopeName =
+    selectedProject ? selectedProject.name : "Todos os Projetos";
 
   const scopedTasks =
     selectedProjectId === "all"
@@ -226,6 +230,29 @@ export function AntiGravityModal({
                 );
               })}
             </div>
+
+            {selectedProject && (
+              <div className="flex items-center justify-between gap-2 rounded-lg border border-border/50 bg-secondary/30 px-3 py-1.5 text-[11px] mt-1">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <Terminal className="h-3.5 w-3.5 text-primary shrink-0" />
+                  <span className="text-muted-foreground shrink-0 font-medium">Pasta no PC:</span>
+                  {selectedProject.path ? (
+                    <span className="font-mono text-foreground truncate select-all" title={selectedProject.path}>
+                      {selectedProject.path}
+                    </span>
+                  ) : (
+                    <span className="italic text-muted-foreground/80">
+                      Caminho local não configurado (edite o projeto para adicionar o caminho)
+                    </span>
+                  )}
+                </div>
+                {selectedProject.path && (
+                  <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-emerald-500/40 text-emerald-400 font-normal shrink-0">
+                    Target OK
+                  </Badge>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Metrics summary */}
@@ -296,17 +323,30 @@ export function AntiGravityModal({
               </div>
             ) : (
               <div className="space-y-1.5 max-h-56 overflow-y-auto p-1 border border-border/40 rounded-xl bg-secondary/20">
-                {todoTasks.map((t) => (
-                  <div
-                    key={t.id}
-                    className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-card/80 p-2 text-xs hover:border-border transition-colors"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="font-medium text-foreground truncate">{t.title}</div>
-                      <div className="flex items-center gap-2 text-[10px] text-muted-foreground mt-0.5">
-                        <span className="inline-flex items-center gap-1">
-                          <Layers className="h-2.5 w-2.5" /> {t.project}
-                        </span>
+                {todoTasks.map((t) => {
+                  const taskProj = projects.find(
+                    (p) => p.id === t.projectId || p.name?.toLowerCase() === t.project?.toLowerCase()
+                  );
+                  return (
+                    <div
+                      key={t.id}
+                      className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-card/80 p-2 text-xs hover:border-border transition-colors"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium text-foreground truncate">{t.title}</div>
+                        <div className="flex items-center gap-2 text-[10px] text-muted-foreground mt-0.5">
+                          <span className="inline-flex items-center gap-1">
+                            <Layers className="h-2.5 w-2.5" /> {t.project}
+                          </span>
+                          {taskProj?.path && (
+                            <span
+                              className="inline-flex items-center gap-1 font-mono text-[9px] text-muted-foreground bg-secondary/70 px-1.5 py-0.5 rounded border border-border/40"
+                              title={`Diretório alvo: ${taskProj.path}`}
+                            >
+                              <Terminal className="h-2.5 w-2.5 text-primary" />
+                              {taskProj.path.split(/[/\\]/).filter(Boolean).pop()}
+                            </span>
+                          )}
                         {t.priority && (
                           <span
                             className={cn(
@@ -339,8 +379,9 @@ export function AntiGravityModal({
                       Executar com AGY
                     </Button>
                   </div>
-                ))}
-              </div>
+                );
+              })}
+            </div>
             )}
           </div>
 

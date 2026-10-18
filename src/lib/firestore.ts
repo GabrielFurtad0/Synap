@@ -45,6 +45,7 @@ export type ProjectDoc = {
   name: string;
   color?: string;
   icon?: string;
+  path?: string;
 };
 
 const TASKS = "tasks";

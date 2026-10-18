@@ -117,13 +117,49 @@ async function main() {
     console.log(`\n📁 Projects (${snap.size}):\n`);
     snap.forEach((doc) => {
       const p = doc.data();
-      console.log(`• [${doc.id}] ${p.name} (color: ${p.color || "default"}, icon: ${p.icon || "default"})`);
+      console.log(`• [${doc.id}] ${p.name} (color: ${p.color || "default"}, path: ${p.path || "não configurado"})`);
     });
     console.log();
     return;
   }
 
-  console.log("Comandos disponíveis: list, get, move, note, create, projects");
+  if (cmd === "set-path") {
+    const [idOrName, ...pathParts] = args;
+    const projectPath = pathParts.join(" ").trim();
+    if (!idOrName || !projectPath) {
+      console.error("Uso: node scripts/nimbus-cli.mjs set-path <id|nomeDoProjeto> <caminhoNoDisco>");
+      return;
+    }
+
+    let docRef = db.collection("projects").doc(idOrName);
+    let docSnap = await docRef.get();
+
+    if (!docSnap.exists) {
+      const snap = await db.collection("projects").get();
+      let found = null;
+      snap.forEach((d) => {
+        if (d.data().name?.toLowerCase() === idOrName.toLowerCase()) {
+          found = d;
+        }
+      });
+      if (found) {
+        docRef = db.collection("projects").doc(found.id);
+        docSnap = found;
+      } else {
+        console.error(`Projeto '${idOrName}' não encontrado.`);
+        return;
+      }
+    }
+
+    await docRef.update({
+      path: projectPath,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    console.log(`Caminho local do projeto '${docSnap.data().name}' (${docRef.id}) atualizado para: ${projectPath}`);
+    return;
+  }
+
+  console.log("Comandos disponíveis: list, get, move, note, create, projects, set-path");
 }
 
 main().catch(console.error);

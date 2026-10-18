@@ -163,7 +163,7 @@ export function TaskBoard() {
 
   const showProjectBadge = !selectedProjectId && navFilter === "inbox";
 
-  const handleSaveProject = (data: { name: string; color: string; icon: string }) => {
+  const handleSaveProject = (data: { name: string; color: string; icon: string; path?: string }) => {
     if (!user) return;
     if (editingProject) {
       fsUpdateProject(editingProject.id, data).catch((e) => console.error("updateProject failed:", e));

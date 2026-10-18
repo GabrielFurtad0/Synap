@@ -78,6 +78,26 @@ async function getUserId() {
   return "anonymous";
 }
 
+// Helper to map project ID and project name to local disk path
+async function getProjectPathMap() {
+  const pMap = {};
+  try {
+    const snap = await db.collection("projects").get();
+    snap.forEach((doc) => {
+      const p = doc.data();
+      if (p.path) {
+        pMap[doc.id] = p.path;
+        if (p.name) {
+          pMap[p.name.trim().toLowerCase()] = p.path;
+        }
+      }
+    });
+  } catch (err) {
+    console.error("Erro ao mapear caminhos dos projetos:", err);
+  }
+  return pMap;
+}
+
 const server = new Server(
   {
     name: "nimbus-mcp",
@@ -286,14 +306,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       const limit = typeof args?.limit === "number" ? args.limit : 50;
       const snap = await query.limit(limit).get();
+      const pMap = await getProjectPathMap();
 
       const tasks = snap.docs.map((doc) => {
         const data = doc.data();
+        const projectPath =
+          (data.projectId && pMap[data.projectId]) ||
+          (data.project && pMap[data.project.trim().toLowerCase()]) ||
+          null;
+
         return {
           id: doc.id,
           title: data.title,
           status: data.status,
           project: data.project,
+          projectId: data.projectId || null,
+          projectPath,
           priority: data.priority,
           due: data.due,
           tags: data.tags || [],
@@ -321,11 +349,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           isError: true,
         };
       }
+      const data = doc.data();
+      const pMap = await getProjectPathMap();
+      const projectPath =
+        (data.projectId && pMap[data.projectId]) ||
+        (data.project && pMap[data.project.trim().toLowerCase()]) ||
+        null;
+
       return {
         content: [
           {
             type: "text",
-            text: JSON.stringify({ id: doc.id, ...doc.data() }, null, 2),
+            text: JSON.stringify({ id: doc.id, ...data, projectPath }, null, 2),
           },
         ],
       };
