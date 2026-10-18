@@ -7,9 +7,8 @@ echo ========================================================
 echo        SYNAP - Neural Task Engine (Smart Task Manager)
 echo ========================================================
 echo.
-echo Iniciando servidor de desenvolvimento...
-echo Caso a porta 8080 esteja ocupada (ex: TotalTrigo),
-echo o Vite selecionara a proxima porta livre automaticamente (8081, 8082...).
+echo Iniciando servidor de desenvolvimento Synap na porta 8090...
+echo (Porta 8090 definida para nao colidir com o TotalTrigo nas portas 8080/8085).
 echo.
 
 cd /d "%~dp0"

@@ -14,8 +14,8 @@ export default defineConfig({
   },
   vite: {
     server: {
-      port: 8080,
-      strictPort: false, // Se a porta 8080 estiver em uso (ex: TotalTrigo), tenta automaticamente 8081, 8082...
+      port: 8090,
+      strictPort: false, // Se a porta 8090 estiver em uso, tenta automaticamente 8091, 8092...
     },
   },
 });
