@@ -12,7 +12,7 @@ echo Este processo escuta as tarefas acionadas pelo botao
 echo "Executar com AGY" no Synap e opera diretamente no seu PC!
 echo.
 
-cd /d "%~dp0"
+cd /d "%~dp0.."
 
 node scripts/agy-worker.mjs
 if %errorlevel% neq 0 (

@@ -14,7 +14,7 @@ echo.
 cd /d "%~dp0"
 
 echo [1/2] Iniciando AntiGravity Worker em janela paralela...
-start "AntiGravity Worker" cmd /c "start-worker.bat"
+start "AntiGravity Worker" cmd /c "scripts\start-worker.bat"
 
 echo [2/2] Iniciando Synap Web Server...
 npm run dev

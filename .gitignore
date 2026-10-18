@@ -31,6 +31,12 @@ dist-ssr
 *.sln
 *.sw?
 *.zip
+archive/
+
+# Environment files
+.env
+.env.*
+!.env.example
 
 # Firebase Service Account Credentials
 serviceAccountKey.json
