@@ -44,6 +44,8 @@ import {
   ListChecks,
   MessageSquareQuote,
   CornerDownRight,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import {
   Popover,
@@ -169,7 +171,13 @@ export function TaskBoard() {
 
   const showProjectBadge = !selectedProjectId && navFilter === "inbox";
 
-  const handleSaveProject = (data: { name: string; color: string; icon: string; path?: string }) => {
+  const handleSaveProject = (data: {
+    name: string;
+    color: string;
+    icon: string;
+    path?: string;
+    hideInInbox?: boolean;
+  }) => {
     if (!user) return;
     if (editingProject) {
       fsUpdateProject(editingProject.id, data).catch((e) => console.error("updateProject failed:", e));
@@ -179,6 +187,23 @@ export function TaskBoard() {
       toast.success(`Projeto "${data.name}" criado com sucesso!`);
     }
     setEditingProject(null);
+  };
+
+  const toggleHideProjectInInbox = (projectId: string) => {
+    const target = projects.find((p) => p.id === projectId);
+    if (!target) return;
+    const nextHidden = !target.hideInInbox;
+    setProjects((prev) =>
+      prev.map((p) => (p.id === projectId ? { ...p, hideInInbox: nextHidden } : p))
+    );
+    fsUpdateProject(projectId, { hideInInbox: nextHidden }).catch((e) =>
+      console.error("toggleHideProjectInInbox failed:", e)
+    );
+    toast.info(
+      nextHidden
+        ? `Tarefas de "${target.name}" ocultadas no Inbox.`
+        : `Tarefas de "${target.name}" visíveis no Inbox.`
+    );
   };
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
@@ -261,6 +286,17 @@ export function TaskBoard() {
               t.project.trim().toLowerCase() === activeProject.name.trim().toLowerCase()
           );
           if (!matchesId && !matchesName) return false;
+        }
+
+        // Hide tasks from projects marked as hideInInbox ONLY when in Inbox screen!
+        if (!selectedProjectId && navFilter === "inbox") {
+          const isHidden = projects.some(
+            (p) =>
+              p.hideInInbox &&
+              ((t.projectId && p.id === t.projectId) ||
+                (t.project && p.name && p.name.trim().toLowerCase() === t.project.trim().toLowerCase()))
+          );
+          if (isHidden) return false;
         }
 
         if (navFilter === "starred" && !t.isStarred) return false;
@@ -378,6 +414,7 @@ export function TaskBoard() {
           setEditingProject(p);
           setProjectModalOpen(true);
         }}
+        onToggleHideInInbox={toggleHideProjectInInbox}
         onOpenSettings={() => setSettingsOpen(true)}
         onOpenNewTask={() => {
           setCreateModalStatus("todo");
@@ -386,7 +423,7 @@ export function TaskBoard() {
           setCreateModalMode("global");
           setCreateModalOpen(true);
         }}
-        navCounts={navCountsFor(tasks)}
+        navCounts={navCountsFor(tasks, projects)}
         navFilter={navFilter}
         onNavFilter={(k) => {
           setNavFilter(k);
@@ -575,7 +612,7 @@ export function TaskBoard() {
   );
 }
 
-function navCountsFor(tasks: TaskDoc[]) {
+function navCountsFor(tasks: TaskDoc[], projects?: ProjectDoc[]) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const weekEnd = new Date(today);
@@ -586,7 +623,13 @@ function navCountsFor(tasks: TaskDoc[]) {
     starred = 0;
   for (const t of tasks ?? []) {
     if (!t) continue;
-    if (t.status !== "done") inbox++;
+    const isHiddenInInbox = projects?.some(
+      (p) =>
+        p.hideInInbox &&
+        ((t.projectId && p.id === t.projectId) ||
+          (t.project && p.name && p.name.trim().toLowerCase() === t.project.trim().toLowerCase()))
+    );
+    if (t.status !== "done" && !isHiddenInInbox) inbox++;
     if (t.isStarred) starred++;
     if (t.due) {
       const d = new Date(t.due + "T00:00:00");
@@ -609,6 +652,7 @@ function SidebarNav({
   onRemoveProject,
   onOpenCreateProject,
   onOpenEditProject,
+  onToggleHideInInbox,
   onOpenSettings,
   onOpenNewTask,
   navCounts,
@@ -626,6 +670,7 @@ function SidebarNav({
   onRemoveProject: (id: string) => void;
   onOpenCreateProject?: () => void;
   onOpenEditProject?: (p: ProjectDoc) => void;
+  onToggleHideInInbox?: (id: string) => void;
   onOpenSettings: () => void;
   onOpenNewTask: () => void;
   navCounts: { inbox: number; today: number; upcoming: number; starred: number };
@@ -720,6 +765,29 @@ function SidebarNav({
               <ProjectIcon className="h-3.5 w-3.5 opacity-70 shrink-0" />
               <span className="flex-1 truncate">{p.name}</span>
               <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                {onToggleHideInInbox && (
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToggleHideInInbox(p.id);
+                    }}
+                    className={cn(
+                      "rounded p-0.5 transition-colors",
+                      p.hideInInbox
+                        ? "text-amber-400 hover:text-amber-300"
+                        : "hover:text-foreground"
+                    )}
+                    title={
+                      p.hideInInbox
+                        ? "Mostrar tarefas deste projeto no Inbox (atualmente ocultas)"
+                        : "Esconder tarefas deste projeto no Inbox"
+                    }
+                  >
+                    {p.hideInInbox ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                  </span>
+                )}
                 {onOpenEditProject && (
                   <span
                     role="button"

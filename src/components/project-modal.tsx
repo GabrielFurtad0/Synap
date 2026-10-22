@@ -17,11 +17,13 @@ import {
   ShoppingBag,
   Music,
   Terminal,
+  EyeOff,
   X,
   Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import type { ProjectDoc } from "@/lib/firestore";
 
@@ -71,13 +73,14 @@ export function ProjectModal({
   open: boolean;
   onClose: () => void;
   project?: ProjectDoc | null;
-  onSave: (data: { name: string; color: string; icon: string; path?: string }) => void;
+  onSave: (data: { name: string; color: string; icon: string; path?: string; hideInInbox?: boolean }) => void;
 }) {
   const isEditing = !!project;
   const [name, setName] = useState("");
   const [color, setColor] = useState("bg-violet-400");
   const [icon, setIcon] = useState("folder");
   const [path, setPath] = useState("");
+  const [hideInInbox, setHideInInbox] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -86,11 +89,13 @@ export function ProjectModal({
         setColor(project.color || "bg-violet-400");
         setIcon(project.icon || "folder");
         setPath(project.path || "");
+        setHideInInbox(Boolean(project.hideInInbox));
       } else {
         setName("");
         setColor(PROJECT_COLORS[Math.floor(Math.random() * PROJECT_COLORS.length)].id);
         setIcon("folder");
         setPath("");
+        setHideInInbox(false);
       }
     }
   }, [open, project]);
@@ -99,7 +104,7 @@ export function ProjectModal({
     if (e) e.preventDefault();
     const cleanName = name.trim();
     if (!cleanName) return;
-    onSave({ name: cleanName, color, icon, path: path.trim() || undefined });
+    onSave({ name: cleanName, color, icon, path: path.trim() || undefined, hideInInbox });
     onClose();
   };
 
@@ -206,6 +211,28 @@ export function ProjectModal({
               <p className="mt-1 text-[11px] text-muted-foreground/75">
                 Diretório onde o código deste projeto fica no seu computador para o AntiGravity saber onde programar.
               </p>
+            </div>
+
+            {/* Ocultar tarefas no Inbox */}
+            <div className="flex items-start gap-2.5 rounded-lg border border-border/50 bg-secondary/20 p-2.5">
+              <Checkbox
+                id="hideInInbox"
+                checked={hideInInbox}
+                onCheckedChange={(c) => setHideInInbox(Boolean(c))}
+                className="mt-0.5"
+              />
+              <div className="space-y-0.5 leading-none">
+                <label
+                  htmlFor="hideInInbox"
+                  className="text-xs font-medium text-foreground cursor-pointer flex items-center gap-1.5"
+                >
+                  <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />
+                  Ocultar tarefas deste projeto no Inbox
+                </label>
+                <p className="text-[11px] text-muted-foreground">
+                  As tarefas não poluirão a caixa de entrada geral, mas continuam visíveis normalmente ao acessar a aba deste projeto.
+                </p>
+              </div>
             </div>
 
             <div className="flex justify-end gap-2 pt-2 border-t border-border/60">

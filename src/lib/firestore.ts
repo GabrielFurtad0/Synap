@@ -58,6 +58,7 @@ export type ProjectDoc = {
   color?: string;
   icon?: string;
   path?: string;
+  hideInInbox?: boolean;
 };
 
 const TASKS = "tasks";
