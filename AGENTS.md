@@ -8,3 +8,13 @@
 > Commits you push to the connected branch sync back to Lovable and show up in
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
+
+## Diretrizes de Ambiente e Diretório de Trabalho
+> [!IMPORTANT]
+> **DIRETÓRIO OFICIAL DE DESENVOLVIMENTO:**
+> Todo o desenvolvimento, execução de comandos, workers e projetos devem ocorrer sempre dentro da pasta:
+> `C:\Users\PC-Gabriel\Documents\antigravity\`
+> - O Synap (PTM) reside em: `C:\Users\PC-Gabriel\Documents\antigravity\PTM`
+> - Os demais projetos residem em subpastas de `C:\Users\PC-Gabriel\Documents\antigravity\` (ex: `TotalTrigo`).
+> Nunca utilize caminhos de OneDrive ou crie duplicações fora de `Documents\antigravity\`.
+
